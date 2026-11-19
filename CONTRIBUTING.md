@@ -4,7 +4,7 @@ Thank you for helping test or develop the port. The current priority is Windows 
 
 ## Set up your environment
 
-Follow the [build guide](docs/building.md). Each contributor supplies their own compatible SWF. Do not commit the original game, decompiled scripts, generated resources, executables, saves, logs, or test captures to the source tree.
+Follow the [build guide](docs/building.md). Use the prepared assets from the Windows release for a normal C++ build. A compatible SWF is needed only to regenerate resources with the optional developer tools. Do not commit the original game, decompiled scripts, generated resources, executables, saves, logs, or test captures to the source tree.
 
 ## Propose a change
 

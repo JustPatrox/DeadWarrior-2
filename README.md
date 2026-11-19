@@ -16,7 +16,8 @@
 
 <p align="center">
   <a href="#current-status">Status</a> ·
-  <a href="#build-and-play">Build</a> ·
+  <a href="#download-and-play">Download</a> ·
+  <a href="#build-from-source">Build</a> ·
   <a href="#pc-controls">Controls</a> ·
   <a href="https://github.com/JustPatrox/DeadWarrior-2/issues/new/choose">Report a bug</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
@@ -26,7 +27,7 @@
 
 DeadWarrior 2 translates the game's logic into C++ and adapts its presentation to 16:9 displays. The executable uses Direct2D and XAudio2, with a software rendering fallback. The simulation runs at **30 Hz**, independently of the rendering frame rate.
 
-Each user must supply their **own copy of `stickwar2.swf`** to generate the resources for their installation. This repository contains the code and preparation tools. The SWF, decompiled game scripts, sprites, music, and sound effects stay outside Git.
+The Windows download is a **native, ready-to-play port**: `DeadWarrior 2.exe` and its prepared `assets` folder. **No SWF, Flash Player, Java, Python, or emulator is needed to play.** The game runs its translated C++ controllers rather than loading the original SWF.
 
 This project is not affiliated with Max Games or the original game's creators. See [credits and third-party content](NOTICE.md).
 
@@ -47,26 +48,29 @@ This project is not affiliated with Max Games or the original game's creators. S
 
 CI checks the Windows source build and Python tools. Gameplay tests require locally generated assets; a green CI result does not certify the full campaign.
 
-## Build and play
+## Download and play
 
-You need Windows x64, Git, **Visual Studio 2022 or 2026** with *Desktop development with C++*, CMake 3.24 or later, **Python 3.11**, **Java 21 x64**, and **JPEXS FFDec 26.5.0**. Links and instructions are in the [build guide](docs/building.md).
+**[Download the Windows development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.1)**
+
+1. Download `DeadWarrior-2-Windows-x64.zip` from the release assets.
+2. Extract the entire ZIP to a folder.
+3. Run **`DeadWarrior 2.exe`**.
+
+Keep the included `assets` folder next to the executable. This is an unfinished campaign preview, with the six missions listed above; it is not the complete game.
+
+## Build from source
+
+For the native Windows build, you need Git and **Visual Studio 2022 or 2026** with *Desktop development with C++* and CMake 3.24 or later. Copy the prepared `assets` folder from the Windows download into your checkout, then build:
 
 ```powershell
 git clone https://github.com/JustPatrox/DeadWarrior-2.git
 cd DeadWarrior-2
-python -m venv work/venv
-work/venv/Scripts/python.exe -m pip install -r requirements-assets.txt
-```
-
-Prepare your SWF and tools as described in [the guide](docs/building.md), then run:
-
-```powershell
-work/venv/Scripts/python.exe tools/prepare_assets.py --swf "C:\path\to\stickwar2.swf" --java-home "C:\path\to\java-21" --ffdec-home "C:\path\to\ffdec"
+# Copy the release's assets folder into this directory before building.
 .\tools\build_windows.ps1
 & '.\out\windows-x64\DeadWarrior 2.exe'
 ```
 
-The first preparation run extracts and generates thousands of resources and can take a while. Keep the executable alongside its `assets` folder.
+See the [build guide](docs/building.md) for details. Preparing resources from an original SWF is an **optional developer workflow**, using Python, Java, and FFDec. Those tools are not part of the game runtime. The source tree keeps generated game resources out of Git; the Windows release includes everything needed to play.
 
 ## PC controls
 

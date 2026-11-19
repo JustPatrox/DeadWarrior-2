@@ -1,8 +1,42 @@
-# Building from your own copy of the game
+# Building the native Windows port
 
-The current target is Windows x64. The repository distributes source, tools, and branding; game resources are generated on your computer.
+DeadWarrior 2 is a native C++ game port. **A normal C++ build does not require a SWF**, provided you use the prepared assets from the Windows release. Players can simply download and extract the ready-to-play ZIP.
 
-## Dependencies
+## Native build prerequisites
+
+- Windows x64 and Git.
+- Visual Studio 2022 or 2026 with **Desktop development with C++**, the Windows SDK, and CMake tools.
+- CMake 3.24 or later; `build_windows.ps1` uses the version bundled with Visual Studio.
+
+## Build using the prepared assets
+
+1. Download and extract [the Windows preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.1).
+2. Clone the source repository.
+3. Copy the release's `assets` folder into the checkout, alongside `CMakeLists.txt`. Merge it with the existing branding folder.
+4. Build and run:
+
+```powershell
+git clone https://github.com/JustPatrox/DeadWarrior-2.git
+cd DeadWarrior-2
+# Replace this path with the folder where you extracted the Windows download.
+Copy-Item -LiteralPath 'C:\path\to\DeadWarrior-2-Windows-x64\assets' -Destination . -Recurse -Force
+.\tools\build_windows.ps1
+& '.\out\windows-x64\DeadWarrior 2.exe'
+```
+
+The output directory contains `DeadWarrior 2.exe` and `assets/`. Keep them together. No SWF, Python, Java, FFDec, Flash Player, or emulator is needed to run that installation. Saves are stored in `%LOCALAPPDATA%\DeadWarrior 2\campaign.sav`.
+
+To check simulations and audio with the prepared assets:
+
+```powershell
+.\tools\build_windows.ps1 -CheckTutorial -CheckArchidon -CheckMagic -CheckRebels -CheckGiants -CheckAudio
+```
+
+## Optional: regenerate resources from the original game
+
+This section is for developers changing extraction or asset-compilation tools. It is not the player installation process. Use a compatible SWF that you supply yourself; the tool does not download the original game or wrap it in a player.
+
+### Optional regeneration dependencies
 
 | Tool | Tested version / requirement | Source |
 | --- | --- | --- |
@@ -14,11 +48,9 @@ The current target is Windows x64. The repository distributes source, tools, and
 
 Flash Player and emulation software are not required to run the port. Optional comparison tools use reference players and Playwright; these are not game dependencies.
 
-## Prepare resources
+### Regenerate resources
 
 ```powershell
-git clone https://github.com/JustPatrox/DeadWarrior-2.git
-cd DeadWarrior-2
 python -m venv work/venv
 work/venv/Scripts/python.exe -m pip install -r requirements-assets.txt
 ```
@@ -45,21 +77,6 @@ Remove `--check` to extract and compile resources. Preparation needs several GB 
 
 Use `--reuse-extraction` to reuse `work/extract` when its matching SWF inventory already exists. Native resources are still regenerated. Individual module compilers remain available for targeted updates; see [windows.md](windows.md).
 
-## Build the executable
-
-```powershell
-.\tools\build_windows.ps1
-& '.\out\windows-x64\DeadWarrior 2.exe'
-```
-
-The output contains the executable and `assets/`. Keep both together when moving your local installation. Saves are stored in `%LOCALAPPDATA%\DeadWarrior 2\campaign.sav`.
-
-To check simulations and audio:
-
-```powershell
-.\tools\build_windows.ps1 -CheckTutorial -CheckArchidon -CheckMagic -CheckRebels -CheckGiants -CheckAudio
-```
-
 ## Checks without game resources
 
 The source build does not require the SWF. In a terminal with CMake and Visual Studio:
@@ -71,4 +88,4 @@ python -m compileall -q tools
 python tools/check_repository.py
 ```
 
-The resulting executable still needs prepared resources to play. GitHub Actions compiles the game and diagnostic probes without running gameplay or publishing original game content. Reports and captures mentioned in development documentation are local files excluded from the public repository.
+The resulting executable still needs the prepared assets folder to play. GitHub Actions compiles the source and diagnostic probes; the complete Windows preview is packaged and tested separately. Reports and captures mentioned in development documentation are local files excluded from the public repository.

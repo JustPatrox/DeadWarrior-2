@@ -37,7 +37,7 @@ The frame-limit checks recorded simulation rates between 29.82 and 30.20 steps p
 
 ## Resource preparation
 
-Each user supplies the compatible 18,886,237-byte SWF documented in [building.md](building.md). The original file is not modified or included in Git. Native game resources and extracted scripts are generated locally. Once prepared, the executable does not need the SWF at runtime.
+The Windows release includes prepared native resources. Players do not need a SWF or extraction tools. Developers can copy the release's `assets` folder into a checkout for a normal native C++ build. Only optional resource regeneration uses the compatible 18,886,237-byte SWF documented in [building.md](building.md); it does not modify the original. The executable never loads the SWF at runtime.
 
 The pipeline uses FFDec 26.5.0, Temurin Java 21 x64, and the Python packages pinned in `requirements-assets.txt`. `tools/prepare_assets.py` accepts explicit SWF, Java, and FFDec paths. Individual generators use `DW2_SWF`, `DW2_JAVA_HOME`, and `DW2_FFDEC_HOME` when set; otherwise they use the original project-local paths.
 
