@@ -169,7 +169,7 @@ void SdlDisplay::append(std::vector<Draw>& draws) const {
     draws.push_back(Draw::label({233,548,270,24},"Show FPS",18,0xf5f6f9));
     draws.push_back(Draw::shape(Kind::Box,{555,544,66,30},fps_ ? 0x654515 : 0x100c05));
     draws.push_back(Draw::label({555,550,66,20},fps_ ? "On" : "Off",14,fps_ ? 0xffd992 : 0xbfc6d0,true));
-    draws.push_back(Draw::label({219,601,412,22},"16:9  |  Insert or Esc to close",14,0xbfc6d0));
+    draws.push_back(Draw::label({219,601,412,22},std::string("16:9  |  ")+settingsKeyLabel+" or Esc to close",14,0xbfc6d0));
 }
 
 

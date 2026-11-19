@@ -133,10 +133,10 @@ jobs:
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > existing.json
           while IFS= read -r file; do
             name="$(basename "$file")"
-            if jq -e --arg name "$name" '.assets[] | select(.name == $name)' existing.json >/dev/null; then
+            if [ "$name" = 'DeadWarrior-2-Windows-x64.zip' ] && jq -e --arg name "$name" '.assets[] | select(.name == $name)' existing.json >/dev/null; then
               echo "Preserving existing release asset: $name"
             else
-              gh release upload "$RELEASE_TAG" "$file" --repo "$GITHUB_REPOSITORY"
+              gh release upload "$RELEASE_TAG" "$file" --clobber --repo "$GITHUB_REPOSITORY"
             fi
           done < <(find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) | sort)
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > uploaded.json

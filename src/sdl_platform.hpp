@@ -7,6 +7,15 @@
 #include <mutex>
 
 namespace sw2 {
+#ifdef __APPLE__
+inline constexpr bool optionSettingsKey=true;
+inline constexpr SDL_Keycode settingsKeyCode=SDLK_LALT;
+inline constexpr const char* settingsKeyLabel="Option";
+#else
+inline constexpr bool optionSettingsKey=false;
+inline constexpr SDL_Keycode settingsKeyCode=SDLK_INSERT;
+inline constexpr const char* settingsKeyLabel="Insert";
+#endif
 class SdlRenderer {
     struct Cached {SDL_Texture* image{}; size_t bytes{}; unsigned serial{};};
     SDL_Renderer* renderer_{};

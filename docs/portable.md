@@ -20,7 +20,7 @@ macOS app: `out/package/DeadWarrior 2.app`. Release packages target macOS 11 or 
 
 ## Settings, saves, and diagnostics
 
-Insert or F10 opens PC settings. F11 changes fullscreen. MENU, Esc, and P open the campaign pause menu. Presentation supports a resolution selector, windowed/borderless/fullscreen, V-Sync, an FPS counter, and 30/60/120/240/unlimited presentation rates. Gameplay remains at 30 Hz. The pause menu freezes gameplay and narration; music has an independent toggle.
+Tap Option on macOS or press Insert on Linux to open PC settings. Either Option key works; Option combinations keep their normal behavior. F11 changes fullscreen. MENU, Esc, and P open the campaign pause menu. Presentation supports a resolution selector, windowed/borderless/fullscreen, V-Sync, an FPS counter, and 30/60/120/240/unlimited presentation rates. Gameplay remains at 30 Hz. The pause menu freezes gameplay and narration; music has an independent toggle.
 
 SDL chooses the per-user directory. Typical locations:
 

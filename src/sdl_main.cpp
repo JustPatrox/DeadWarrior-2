@@ -32,7 +32,7 @@ class Application {
     std::unique_ptr<WorkInProgress> wip_;
     SDL_Texture* buffer_{};
     int bufferWidth_{},bufferHeight_{},lastStep_{-1},lastLogTick_{};
-    bool running_{true},notice_{true},pauseButton_{};
+    bool running_{true},notice_{true},pauseButton_{},optionPending_{};
     Clock::time_point noticeEnd_{Clock::now()+std::chrono::seconds(3)},bannerEnd_{};
     std::string banner_;
     double fps_{};
@@ -47,6 +47,10 @@ class Application {
         log("UNAVAILABLE "+control);banner_="This button does not work yet, please report it with the log";bannerEnd_=Clock::now()+std::chrono::seconds(6);
     }
     void paused(bool value) {pause_.setOpen(value);audio_.paused(value||display_.isOpen());if(battle_) {battle_->release({});battle_->point({});}}
+    void toggleSettings() {
+        display_.setOpen(!display_.isOpen());audio_.paused(display_.isOpen()||pause_.isOpen());
+        if(battle_) {battle_->point({});battle_->release({});}
+    }
     void mainMenu() {
         battle_.reset();campaign_.reset();wip_.reset();paused(false);progress_={};loadSave();menu_.restart(saved_.has_value());audio_.music("loginMusic");log("SCENE main-menu");
     }
@@ -124,6 +128,7 @@ public:
     }
     ~Application() {display_.save();if(buffer_) SDL_DestroyTexture(buffer_);log("SHUTDOWN");}
     void pointer(int action,std::optional<Point> p) {
+        if(action==1||action==3) optionPending_=false;
         if(action==1) SDL_CaptureMouse(true);if(action==2) SDL_CaptureMouse(false);
         if(display_.isOpen()) {display_.pointer(action,p);return;}
         if(notice_) return;
@@ -149,7 +154,12 @@ public:
         if(action==1) menu_.press(target);if(action==2) menu_.release(target);menuActions();
     }
     void key(SDL_Keycode key) {
-        if(key==SDLK_INSERT||key==SDLK_F10) {display_.setOpen(!display_.isOpen());audio_.paused(display_.isOpen()||pause_.isOpen());if(battle_) {battle_->point({});battle_->release({});}return;}
+        if constexpr(optionSettingsKey) {
+            if(key==SDLK_LALT||key==SDLK_RALT) {
+                optionPending_=!(SDL_GetModState()&(SDL_KMOD_CTRL|SDL_KMOD_SHIFT|SDL_KMOD_GUI));return;
+            }
+            optionPending_=false;
+        } else if(key==SDLK_INSERT) {toggleSettings();return;}
         if(key==SDLK_F11) {display_.fullscreen();return;}
         if(display_.isOpen()) {if(key==SDLK_ESCAPE) {display_.setOpen(false);audio_.paused(pause_.isOpen());}else display_.key(key);return;}
         if(pause_.isOpen()) {
@@ -162,6 +172,13 @@ public:
             else if(key==SDLK_UP||key==SDLK_LEFT) wip_->focus(-1);
             else if(key==SDLK_RETURN||key==SDLK_SPACE) wipAction(wip_->selected());
         } else if(battle_&&(key==SDLK_Q||key==SDLK_W||key==SDLK_E)) battle_->unitAbility(key==SDLK_Q ? 0 : key==SDLK_W ? 1 : 2);
+    }
+    void keyRelease(SDL_Keycode key) {
+        // Option is a modifier on macOS. A standalone tap is the menu shortcut;
+        // Option+another key or a mouse click keeps its usual application use.
+        if constexpr(optionSettingsKey) if(key==SDLK_LALT||key==SDLK_RALT) {
+            const bool toggle=optionPending_;optionPending_=false;if(toggle) toggleSettings();
+        }
     }
     void tick() {
         if(notice_) {
@@ -193,7 +210,14 @@ public:
         std::vector<Draw> draws;
         if(notice_) draws.push_back(Draw::label({Viewport::left+20,210,Viewport::width-40,55},"This project is not affiliated with",30,0xffffff,true));
         else if(wip_) draws=wip_->drawList();else if(campaign_) draws=campaign_->drawList();else draws=battle_ ? battle_->drawList() : menu_.drawList();
-        if(pause_.isOpen()&&!display_.isOpen()) {auto panel=pause_.drawList(audio_.soundEnabled(),audio_.musicEnabled());draws.insert(draws.end(),panel.begin(),panel.end());}
+        if(pause_.isOpen()&&!display_.isOpen()) {
+            auto panel=pause_.drawList(audio_.soundEnabled(),audio_.musicEnabled());
+            if constexpr(optionSettingsKey) for(auto& item:panel) {
+                const auto at=item.text.find("Insert: PC settings");
+                if(at!=std::string::npos) item.text.replace(at,6,settingsKeyLabel);
+            }
+            draws.insert(draws.end(),panel.begin(),panel.end());
+        }
         if(!banner_.empty()&&Clock::now()<bannerEnd_) {
             draws.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left+24,15,Viewport::width-48,46},0,.94));
             draws.push_back(Draw::label({Viewport::left+34,25,Viewport::width-68,30},banner_,19,0xffdc82,true));
@@ -211,8 +235,9 @@ public:
             while(SDL_PollEvent(&event)) {
                 if(event.type==SDL_EVENT_QUIT) running_=false;
                 else if(event.type==SDL_EVENT_KEY_DOWN&&!event.key.repeat) key(event.key.key);
+                else if(event.type==SDL_EVENT_KEY_UP) keyRelease(event.key.key);
                 else if(event.type==SDL_EVENT_WINDOW_MOUSE_LEAVE) pointer(0,{});
-                else if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST&&battle_&&!battle_->ended()) paused(true);
+                else if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST) {optionPending_=false;if(battle_&&!battle_->ended()) paused(true);}
                 else if(event.type==SDL_EVENT_MOUSE_MOTION||event.type==SDL_EVENT_MOUSE_BUTTON_DOWN||event.type==SDL_EVENT_MOUSE_BUTTON_UP) {
                     const bool motion=event.type==SDL_EVENT_MOUSE_MOTION;
                     const Point mouse{motion ? double(event.motion.x) : double(event.button.x),motion ? double(event.motion.y) : double(event.button.y)};
@@ -247,7 +272,15 @@ public:
         for(int i=0;i<40;++i) tick();draw(1280,720,out/"tutorial.png");
         const int before=battle_->ticks();click({506,686});require(pause_.isOpen(),"HUD MENU did not open pause");
         for(int i=0;i<60;++i) tick();require(battle_->ticks()==before,"Paused simulation advanced");draw(1280,720,out/"pause.png");
-        key(SDLK_INSERT);require(display_.isOpen(),"Insert settings failed");draw(1280,720,out/"settings.png");
+        if constexpr(optionSettingsKey) {
+            key(SDLK_LALT);key(SDLK_A);keyRelease(SDLK_LALT);
+            require(!display_.isOpen(),"Option combination opened PC settings");
+        }
+        key(settingsKeyCode);keyRelease(settingsKeyCode);require(display_.isOpen(),"Platform settings shortcut failed");draw(1280,720,out/"settings.png");
+        if constexpr(optionSettingsKey) {
+            key(SDLK_RALT);keyRelease(SDLK_RALT);require(!display_.isOpen(),"Right Option did not close settings");
+            key(settingsKeyCode);keyRelease(settingsKeyCode);require(display_.isOpen(),"Option did not reopen settings");
+        }
         key(SDLK_END);key(SDLK_RETURN);require(display_.showFps(),"FPS switch failed");key(SDLK_ESCAPE);key(SDLK_ESCAPE);
         require(!pause_.isOpen(),"Pause did not resume");for(int i=0;i<15;++i) tick();require(battle_->ticks()==before+15,"Resume changed simulation rate");
         for(int level=1;level<CampaignProgress::playableLevelCount;++level) {
@@ -259,7 +292,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true}\n";
         log("SELF-TEST passed");
     }
 };

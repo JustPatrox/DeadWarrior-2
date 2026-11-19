@@ -83,7 +83,7 @@ See the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md
 
 | Key | Action |
 | --- | --- |
-| **Insert** (or **F10** on macOS/Linux) | Open or close PC settings |
+| **Insert** (Windows/Linux), **Option** (macOS) | Open or close PC settings |
 | **F11** | Toggle fullscreen |
 | **Arrow keys / Tab** | Navigate PC settings |
 | **Enter / Space** | Change the selected option |
