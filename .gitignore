@@ -1,0 +1,57 @@
+# Local build products, downloaded tools and extracted source game files
+/work/
+/build/
+/out/
+/dist/
+/evidence/
+/AGENTS.md
+*.swf
+*.fla
+*.as3
+
+# The original game's assets are generated locally from the user's SWF.
+# Only the supplied affiliation logo is part of the source repository.
+/assets/*
+!/assets/branding/
+/assets/branding/*
+!/assets/branding/max-games.png
+
+# Saves, logs and diagnostics
+*.sav
+*.log
+*.dmp
+*.stackdump
+
+# CMake / Visual Studio
+/.vs/
+/.vscode/
+/cmake-build-*/
+CMakeUserPresets.json
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.lib
+
+# Python
+__pycache__/
+*.py[cod]
+/.venv/
+/venv/
+.pytest_cache/
+.ruff_cache/
+
+# Machine-specific configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+Desktop.ini

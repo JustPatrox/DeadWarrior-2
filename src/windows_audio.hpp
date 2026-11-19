@@ -1,0 +1,48 @@
+#pragma once
+#include <windows.h>
+#include <xaudio2.h>
+#include <array>
+#include <filesystem>
+#include <map>
+#include <functional>
+#include <set>
+#include <string_view>
+#include <string>
+#include <vector>
+
+namespace sw2 {
+class WindowsAudio {
+public:
+    explicit WindowsAudio(const std::filesystem::path& directory,std::function<void(std::string_view)> reporter={});
+    ~WindowsAudio();
+    WindowsAudio(const WindowsAudio&)=delete;
+    WindowsAudio& operator=(const WindowsAudio&)=delete;
+    void effect(const std::string& name,double pan=0,bool spatial=true);
+    void narration(const std::filesystem::path&);
+    void music(const std::string& name,bool loop=true);
+    void stopMusic();
+    void stopNarration();
+    void setMuted(bool muted);
+    bool ready() const {return master_!=nullptr;}
+    unsigned submitted() const {return submitted_;}
+    unsigned activeVoices() const;
+    bool musicPlaying() const;
+private:
+    std::function<void(std::string_view)> reporter_;
+    std::set<std::string> reportedMissing_;
+    void report(std::string message) const {if (reporter_) reporter_(message);}
+    struct Clip {WAVEFORMATEX format{}; std::vector<BYTE> data;};
+    struct Voice {IXAudio2SourceVoice* source{}; bool narration{}; unsigned serial{};};
+    std::filesystem::path directory_;
+    std::map<std::filesystem::path,Clip> clips_;
+    std::map<std::string,std::pair<std::filesystem::path,float>> sounds_;
+    std::array<Voice,32> voices_{};
+    IXAudio2* engine_{};
+    IXAudio2MasteringVoice* master_{};
+    IXAudio2SourceVoice* music_{};
+    bool ownsCom_{};
+    unsigned submitted_{};
+    Clip& load(const std::filesystem::path&);
+    void play(Clip&,float volume,float pan,bool narration);
+};
+}

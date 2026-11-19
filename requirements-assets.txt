@@ -1,0 +1,5 @@
+# Versions used by the Windows asset preparation pipeline (Python 3.11).
+Pillow==13.0.0
+numpy==2.4.6
+JPype1==1.7.1
+imageio-ffmpeg==0.8.1
