@@ -25,7 +25,7 @@ def fixture(folder,level):
 
 def run(width,height,checks):
     with tempfile.TemporaryDirectory() as temporary:
-        folder=Path(temporary); save=fixture(folder,6)
+        folder=Path(temporary); save=fixture(folder,7)
         sentinel=folder/"unrelated.txt"; sentinel.write_text("preserve")
         capture=OUT/f"{width}x{height}-capture.png"; trace=OUT/f"{width}x{height}-trace.tsv"
         LOG.write_text("previous-session-marker\n")
@@ -62,7 +62,7 @@ def run(width,height,checks):
                     wait(lambda:state()&1)
                 enter(); shot("unfinished")
                 assert "previous-session-marker" not in LOG.read_text()
-                assert "work-in-progress unavailable_level=7" in LOG.read_text()
+                assert "work-in-progress unavailable_level=8" in LOG.read_text()
                 if not checks:
                     click(425,550); assert process.wait(timeout=8)==0
                     (OUT/f"{width}x{height}-lastest.log").write_bytes(LOG.read_bytes())
@@ -74,7 +74,7 @@ def run(width,height,checks):
                 click(175,465); assert save.exists() and state()&1
                 user.SendMessageW(hwnd,0x100,0x1b,0)
                 click(675,465); wait(lambda:not state()&1)
-                assert save.exists() and save.read_text().splitlines()[1].split()[:2]==["6","6"]
+                assert save.exists() and save.read_text().splitlines()[1].split()[:2]==["7","7"]
                 assert "RESTART completed saves=kept" in LOG.read_text()
                 enter(); click(175,465); wait(lambda:not state()&1)
                 assert not save.exists() and sentinel.read_text()=="preserve"

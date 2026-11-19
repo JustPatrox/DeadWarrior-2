@@ -1,4 +1,6 @@
 include(FetchContent)
+set(DW2_RELEASE_VERSION "development" CACHE STRING "Release identification")
+set(DW2_BUNDLE_BUILD "0" CACHE STRING "Numeric app bundle build")
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -22,7 +24,8 @@ set_target_properties(DeadWarrior2 PROPERTIES OUTPUT_NAME "DeadWarrior 2"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.justpatrox.deadwarrior2"
     MACOSX_BUNDLE_BUNDLE_NAME "DeadWarrior 2"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "0.0.0"
-    MACOSX_BUNDLE_BUNDLE_VERSION "preview.2")
+    MACOSX_BUNDLE_BUNDLE_VERSION "0.0.${DW2_BUNDLE_BUILD}"
+    MACOSX_BUNDLE_INFO_STRING "DeadWarrior 2 ${DW2_RELEASE_VERSION}")
 if(APPLE)
     set(resource_dir "DeadWarrior 2.app/Contents/Resources")
     install(TARGETS DeadWarrior2 BUNDLE DESTINATION .)

@@ -269,7 +269,7 @@ class Window {
     }
     void startMission() {
         pause_.setOpen(false); soundPlayer_.setPaused(false);
-        if (progress_.level>5) {
+        if (progress_.level>=CampaignProgress::playableLevelCount) {
             showUnfinished();
             return;
         }
@@ -286,7 +286,8 @@ class Window {
             if (progress_.level>=2 && !assets_.art.contains({4053,1})) assets_.loadTextures(directory_.parent_path()/"shadow");
             if (progress_.level>=3 && !assets_.art.contains({7531,1})) assets_.loadTextures(directory_.parent_path()/"magic");
             if (progress_.level>=4 && !assets_.art.contains({4067,1})) assets_.loadTextures(directory_.parent_path()/"rebels");
-            if (progress_.level==5 && !assets_.art.contains({6465,1})) assets_.loadTextures(directory_.parent_path()/"giants");
+            if (progress_.level>=5 && !assets_.art.contains({6465,1})) assets_.loadTextures(directory_.parent_path()/"giants");
+            if (progress_.level==6 && !assets_.art.contains({8771,1})) assets_.loadTextures(directory_.parent_path()/"bomber");
             tutorial_=std::make_unique<CampaignTutorial>(assets_,directory_.parent_path(),progress_);
         }
         intermission_.reset();
@@ -294,7 +295,7 @@ class Window {
         soundPlayer_.music("orderInGame");
     }
     void openIntermission(CampaignIntermission::Page page) {
-        if (progress_.level>6) {showUnfinished(); return;}
+        if (progress_.level>CampaignProgress::playableLevelCount) {showUnfinished(); return;}
         logEvent("SCENE campaign level="+std::to_string(progress_.level+1)+" page="+std::to_string(int(page)));
         soundPlayer_.stopNarration();
         intermission_=std::make_unique<CampaignIntermission>(assets_,directory_.parent_path()/"intermission",progress_,page);
@@ -364,7 +365,7 @@ class Window {
             case Action::Map:
                 progress_=CampaignProgress{}; progress_.difficulty=menu_.difficulty(); startMission(); break;
             case Action::LoadCampaign:
-                if (saved_) {progress_=*saved_; if (progress_.level>5) showUnfinished(); else openIntermission(CampaignIntermission::Page::Map);}
+                if (saved_) {progress_=*saved_; if (progress_.level>=CampaignProgress::playableLevelCount) showUnfinished(); else openIntermission(CampaignIntermission::Page::Map);}
                 break;
             case Action::Unavailable: unavailable("menu symbol="+std::to_string(target())); break;
             default: break;
@@ -433,7 +434,10 @@ class Window {
                                   <<'\t'<<battle.ninjas<<'\t'<<battle.wizards<<'\t'<<battle.healers
                                   <<'\t'<<battle.magicHits<<'\t'<<battle.heals<<'\t'<<battle.enemyCastleShots
                                   <<'\t'<<battle.spells[0]<<'\t'<<battle.spells[1]<<'\t'<<battle.spells[2]
-                                  <<'\t'<<battle.giants<<'\t'<<battle.giantHits<<'\t'<<battle.cinematic<<'\t'<<battle.dialogue<<std::endl;
+                                  <<'\t'<<battle.giants<<'\t'<<battle.giantHits<<'\t'<<battle.cinematic<<'\t'<<battle.dialogue
+                                  <<'\t'<<battle.bombers<<'\t'<<battle.bomberWaves<<'\t'<<battle.nextBomberWave
+                                  <<'\t'<<battle.explosions<<'\t'<<battle.boulderShots<<'\t'<<battle.boulderHits<<'\t'<<battle.enslavedGiants
+                                  <<'\t'<<battle.miners<<'\t'<<battle.archers<<'\t'<<battle.population<<std::endl;
                 }
                 auto voice=tutorial_->takeVoice();
                 if (!voice.empty()) {

@@ -10,7 +10,8 @@ struct TrainingButton {int type,building,icon; Point origin;};
 constexpr TrainingButton buttons[]={
     {3104,0,10036,{4,589.35}},{4922,1,10039,{61.6,590}},{6456,1,10051,{32.85,643.35}},
     {4236,2,10042,{119.2,590}},{7289,1,10054,{90.4,643.35}},
-    {7926,3,10048,{234.4,589.35}},{8233,4,10045,{176.8,589.35}}};
+    {7926,3,10048,{234.4,589.35}},{8233,4,10045,{176.8,589.35}},
+    {7526,5,9852,{205.65,643.35}}};
 Draw timerOverlay(Rect rect,double fraction) {
     const double w=rect.w,h=rect.h,pi=std::numbers::pi,c=std::atan2(w,h);
     const double angle=std::clamp(fraction,0.,1.)*2*pi;
@@ -52,11 +53,15 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
         if (u.enemy && u.symbol==wizard) ++status.wizards;
         if (u.enemy && u.symbol==healer) ++status.healers;
         if (u.enemy && u.symbol==giant) {++status.giants; status.giantHealth+=u.hp;}
+        if (u.enemy && u.symbol==bomber) ++status.bombers;
+        if (!u.enemy && u.symbol==enslavedGiant) ++status.enslavedGiants;
     }
     status.mobileShots=mobileShots_; status.towerControl=towerControl_;
     status.magicHits=magicHits_; status.heals=heals_; status.enemyCastleShots=enemyCastleShots_;
     status.spells=spells_;
     status.giantHits=giantHits_; status.cinematic=cinematic_; status.dialogue=dialogueIndex_;
+    status.bomberWaves=bomberWaves_;status.nextBomberWave=nextBomberWave_;status.explosions=explosions_;
+    status.boulderShots=boulderShots_;status.boulderHits=boulderHits_;
     return status;
 }
 CampaignTutorial::Unit& CampaignTutorial::combatTarget(int id) {
@@ -78,6 +83,7 @@ void CampaignTutorial::spawnGroup(bool enemy,const std::vector<int>& symbols) {
 int CampaignTutorial::recruitType(bool enemy,int building) const {
     if (building==0) return enemy && chaosOpponent_ ? chaosMiner : miner;
     if (building==2) return archer;
+    if (building==5) return enemy ? giant : enslavedGiant;
     return enemy && !mission_ ? spearton : sword;
 }
 bool CampaignTutorial::recruit(bool enemy,int building,bool cancel,int requested) {
@@ -109,6 +115,7 @@ bool CampaignTutorial::recruit(bool enemy,int building,bool cancel,int requested
 bool CampaignTutorial::productionPress(Point p) {
     if (!trainingAvailable_) return false;
     for (const auto& slot:buttons) {
+        if (slot.type==enslavedGiant && mission_<6) continue;
         if (slot.type==archer && mission_<2) continue;
         if (slot.type==ninja && mission_<3) continue;
         if ((slot.type==wizard || slot.type==healer) && mission_<4) continue;
@@ -132,6 +139,7 @@ bool CampaignTutorial::productionPress(Point p) {
 void CampaignTutorial::drawProduction(std::vector<Draw>& out) const {
     if (!trainingAvailable_) return;
     for (const auto& slot:buttons) {
+        if (slot.type==enslavedGiant && mission_<6) continue;
         if (slot.type==archer && mission_<2) continue;
         if (slot.type==ninja && mission_<3) continue;
         if ((slot.type==wizard || slot.type==healer) && mission_<4) continue;
@@ -260,7 +268,12 @@ void CampaignTutorial::updateOpponent() {
         production_[1][0].units.empty()) recruit(true,0);
     // The first level's military build order contains only the Spearton. After
     // meeting its composition target the original repeats that same build order.
-    if (mission_==5) {
+    if (mission_==6) {
+        auto count=[&](int type){return std::count_if(units_.begin(),units_.end(),[&](const Unit& u){return u.enemy && u.hp>0 && u.symbol==type;});};
+        const bool full=count(giant)>=rules_.at("composition.Giant") && count(bomber)>=rules_.at("composition.Bomber");
+        if (production_[1][5].units.empty() && (full || count(giant)<rules_.at("composition.Giant"))) recruit(true,5,false,giant);
+        if (military[1]>=6 && production_[1][1].units.empty() && (full || count(bomber)<rules_.at("composition.Bomber"))) recruit(true,1,false,bomber);
+    } else if (mission_==5) {
         // CampaignCutScene1 resets enemy gold to zero each tick.
     } else if (!mission_) {
         if (production_[1][1].units.empty()) recruit(true,1);
@@ -305,6 +318,7 @@ void CampaignTutorial::simulateActors(bool strategy) {
     if (enemyCastleArcher_) updateCastleArcher(true);
     if (chaosOpponent_) updateCastleDead();
     updateMobileArrows();
+    updateBoulders();
     if (mission_>=3) updateMagic();
     updateProduction();
 }
@@ -314,6 +328,7 @@ void CampaignTutorial::updateBattle(bool strategy) {
         enemyPopulation_+=int(stat(units_[id],"population")); reinforcement_=true;
     }
     if (strategy) updateOpponent();
+    if (strategy && mission_==6) updateBomberController();
     for (auto& u:units_) {
         if (!u.canFight || !u.engageOnMove || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
         const auto& statue=statues_[!u.enemy];

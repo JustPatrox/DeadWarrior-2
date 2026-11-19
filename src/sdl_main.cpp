@@ -55,7 +55,7 @@ class Application {
         log("SCENE work-in-progress level="+std::to_string(progress_.level+1));
     }
     void startBattle() {
-        if(progress_.level>5) {unfinished();return;}
+        if(progress_.level>=CampaignProgress::playableLevelCount) {unfinished();return;}
         paused(false);campaign_.reset();wip_.reset();
         if(progress_.level==0) battle_=std::make_unique<CampaignTutorial>(art_,assetsDir_/"tutorial",progress_.difficulty,progress_.records[0].attempts);
         else battle_=std::make_unique<CampaignTutorial>(art_,assetsDir_,progress_);
@@ -63,7 +63,7 @@ class Application {
         log("MISSION start level="+std::to_string(progress_.level+1));
     }
     void openCampaign(CampaignIntermission::Page page) {
-        if(progress_.level>6) {unfinished();return;}
+        if(progress_.level>CampaignProgress::playableLevelCount) {unfinished();return;}
         battle_.reset();wip_.reset();campaign_=std::make_unique<CampaignIntermission>(art_,assetsDir_/"intermission",progress_,page);
         audio_.stopNarration();audio_.music("loginMusic");log("SCENE campaign");
     }
@@ -84,7 +84,7 @@ class Application {
             case Action::ClickSound:audio_.effect("clickButton",0,false);break;
             case Action::MusicToggle:audio_.channels(menu_.music(),menu_.music());break;
             case Action::Map:progress_={};progress_.difficulty=menu_.difficulty();startBattle();break;
-            case Action::LoadCampaign:if(saved_) {progress_=*saved_;if(progress_.level>5) unfinished();else openCampaign(CampaignIntermission::Page::Map);}break;
+            case Action::LoadCampaign:if(saved_) {progress_=*saved_;if(progress_.level>=CampaignProgress::playableLevelCount) unfinished();else openCampaign(CampaignIntermission::Page::Map);}break;
             case Action::Online:SDL_OpenURL("https://www.stickempires.com");break;
             case Action::FirstGame:SDL_OpenURL("https://www.stickpage.com/stickwargame.shtml");break;
             case Action::Stickpage:SDL_OpenURL("https://www.stickpage.com");break;
@@ -117,7 +117,7 @@ public:
         :window_(window),root_(std::move(root)),assetsDir_(root_/"assets"),saveDir_(std::move(saves)),
          log_(saveDir_/"lastest.log",std::ios::trunc),art_(assetsDir_/"menu"),menu_(art_),renderer_(window,art_,root_),
          audio_(assetsDir_/"audio",[this](std::string text){log(text);}),display_(window,renderer_.native(),saveDir_/"options.ini"),pause_(art_) {
-        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
+        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
         loadSave();menu_.restart(saved_.has_value());
         if(auto icon=SDL_LoadPNG((root_/"icon.png").string().c_str())) {SDL_SetWindowIcon(window_,icon);SDL_DestroySurface(icon);}
         log(std::string("START platform=")+SDL_GetPlatform()+" renderer="+SDL_GetRendererName(renderer_.native()));
@@ -250,16 +250,16 @@ public:
         key(SDLK_INSERT);require(display_.isOpen(),"Insert settings failed");draw(1280,720,out/"settings.png");
         key(SDLK_END);key(SDLK_RETURN);require(display_.showFps(),"FPS switch failed");key(SDLK_ESCAPE);key(SDLK_ESCAPE);
         require(!pause_.isOpen(),"Pause did not resume");for(int i=0;i<15;++i) tick();require(battle_->ticks()==before+15,"Resume changed simulation rate");
-        for(int level=1;level<6;++level) {
+        for(int level=1;level<CampaignProgress::playableLevelCount;++level) {
             progress_={};progress_.level=level;progress_.points=level;startBattle();for(int i=0;i<60;++i) tick();
             draw(1280,720,out/("mission-"+std::to_string(level+1)+"-720.png"));draw(1920,1080,out/("mission-"+std::to_string(level+1)+"-1080.png"));
         }
         openCampaign(CampaignIntermission::Page::Upgrades);draw(1280,720,out/"upgrades.png");openCampaign(CampaignIntermission::Page::Map);for(int i=0;i<90;++i) tick();draw(1280,720,out/"map.png");
-        progress_.level=6;startBattle();require(bool(wip_),"Unfinished level guard failed");draw(1280,720,out/"wip.png");
-        require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==6,"Campaign save round trip failed");
+        progress_.level=CampaignProgress::playableLevelCount;startBattle();require(bool(wip_),"Unfinished level guard failed");draw(1280,720,out/"wip.png");
+        require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"menuInput\":true,\"sixMissionEntries\":true,\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true}\n";
         log("SELF-TEST passed");
     }
 };

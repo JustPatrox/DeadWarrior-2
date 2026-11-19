@@ -12,7 +12,7 @@ DeadWarrior 2 is a native C++ game port. **A normal C++ build does not require a
 
 ## Build using the prepared assets
 
-1. Download and extract [the Windows preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.2).
+1. Download and extract [the Windows preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.3).
 2. Clone the source repository.
 3. Copy the release's `assets` folder into the checkout, alongside `CMakeLists.txt`. Merge it with the existing branding folder.
 4. Build and run:

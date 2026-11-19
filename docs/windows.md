@@ -194,3 +194,23 @@ Adobe projector references operate the original controllers through a diagnostic
 Menu references also use local Ruffle web 0.7.1 with Canvas rendering and the game's external network disabled. Optional setup uses Playwright 1.65.2 and local browser files under `work/tools/`. Timing-based SWF animation samples may differ across runs; C++ capture ticks are deterministic.
 
 Full parity of collisions, duels, AI, sieges, the tutorial's natural battle timing, remaining cinematics, higher-DPI behavior, and all interface states is not yet established. Prepared reference scenes are distinguished from complete original-game playthroughs. Windows validation and the full campaign remain open; macOS and Linux have not started.
+
+
+## Seventh mission: Explosive War
+
+Build and run its deterministic campaign checks with:
+
+```powershell
+.\tools\build_windows.ps1 -CheckBomber
+```
+
+The probe recruits miners, a healer, archers, and allied Giants using six earned upgrade points, exercises the original timed waves and armor-sensitive Boulder impacts, reaches both victory and defeat, restores the campaign save, and advances to Juggerknights (map frame 401). It does not bypass victory conditions.
+
+Run the actual executable checks at both target resolutions:
+
+```powershell
+work/venv/Scripts/python.exe tools/check_bomber.py 1280 720
+work/venv/Scripts/python.exe tools/check_bomber.py 1920 1080
+```
+
+The script uses temporary campaign saves and private client captures, validates full waves, Giant production, victory, upgrades, map travel and saving, and checks captured scenes for uncovered magenta pixels. Evidence: `evidence/windows-bomber/`. The Adobe prepared actor reference is `tools/reference_battle.py WIDTH HEIGHT --bomber`; it uses a diagnostic copy and leaves the original SWF unchanged.

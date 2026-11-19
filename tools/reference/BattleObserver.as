@@ -48,9 +48,9 @@ package {
                 var app:Object=DisplayObjectContainer(root).getChildAt(0);
                 if(!("currentScreen" in app)) return;
                 var request:int=socket.bytesAvailable ? socket.readUnsignedByte() : 0;
-                if(request>=66 && request<=70) {
-                    app.campaign.currentLevel=request-65;
-                    app.campaign.campaignPoints=request-65;
+                if((request>=66 && request<=70) || request==72) {
+                    app.campaign.currentLevel=request==72 ? 6 : request-65;
+                    app.campaign.campaignPoints=app.campaign.currentLevel;
                     app.campaign.difficultyLevel=1;
                     app.showScreen("campaignGameScreen");
                     return;
@@ -71,6 +71,17 @@ package {
                     if(request==71 && app.campaign.currentLevel==5)
                         for each(var fixtureUnit:Object in gs.team.enemyTeam.units)
                             if(fixtureUnit.type==19) fixtureUnit.health=0;
+                    // Prepared actor fixture exercises the original throw and
+                    // its target. It does not establish natural battle balance.
+                    if(request==73 && app.campaign.currentLevel==6) {
+                        var guest:Object=gs.game.unitFactory.getUnit(9);
+                        gs.team.spawn(guest,gs.game);guest.px=2500;guest.py=gs.game.map.height/2;
+                        gs.team.population+=guest.population;gs.team.attack(true);
+                        var rival:Object=gs.game.unitFactory.getUnit(19);
+                        gs.team.enemyTeam.spawn(rival,gs.game);rival.px=2900;rival.py=gs.game.map.height/2;
+                        gs.team.enemyTeam.population+=rival.population;
+                        app.stickWar.screenX=app.stickWar.targetScreenX=2200;
+                    }
                     camera=int(app.stickWar.screenX);
                     frame=app.stickWar.frame;
                     selected=gs.userInterface.selectedUnits.selected.length;
@@ -78,8 +89,12 @@ package {
                     if(request==83) {
                         for each(var team:Object in [gs.team,gs.team.enemyTeam]) {
                             for each(var unit:Object in team.units) {
+                                var body:Object=unit.mc;
+                                var pose:String=body.currentLabel;
+                                var animationFrame:int=("mc" in body && body.mc!=null) ? body.mc.currentFrame : 0;
                                 actors+=team.id+","+unit.type+","+int(unit.px)+","+int(unit.py)+","+int(unit.health)+
-                                        ","+int(unit.pwidth)+","+int(unit.pheight)+";";
+                                        ","+unit.pwidth+","+unit.pheight+","+animationFrame+","+
+                                        int("bowAngle" in unit ? unit.bowAngle : 0)+","+pose+";";
                             }
                         }
                     }

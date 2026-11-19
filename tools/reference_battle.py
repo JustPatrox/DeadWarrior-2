@@ -44,8 +44,13 @@ class BattleReadback:
                           ("gold","mana","population","playerStatue","enemyStatue"))
                     self.state.update(zip(keys,map(float,fields[6].split(","))))
                 if fields[7]:
-                    keys=("team","type","x","y","health","width","height")
-                    self.state["units"]=[dict(zip(keys,map(int,actor.split(",")))) for actor in fields[7].rstrip(";").split(";")]
+                    keys=("team","type","x","y","health","width","height","animationFrame","bowAngle")
+                    actors=[]
+                    for actor in fields[7].rstrip(";").split(";"):
+                        values=actor.split(",");entry={key:(float(value) if key in ("width","height") else int(value)) for key,value in zip(keys,values[:9])}
+                        if len(values)>9:entry["pose"]=values[9]
+                        actors.append(entry)
+                    self.state["units"]=actors
                 if data: self.frame=(self.state.copy(),data)
             self.condition.notify_all()
 
@@ -73,7 +78,7 @@ class BattleReadback:
         print(name,state,flush=True)
 
 
-def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,magic=False,rebels=False,giants=False):
+def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,magic=False,rebels=False,giants=False,bomber=False):
     fixture=diagnostic_copy(Path(__file__).parent/"reference/BattleObserver.as")
     feed=BattleReadback(width,height,reinforce,archidon)
     if shadow:
@@ -87,6 +92,9 @@ def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,ma
         feed.out.mkdir(exist_ok=True)
     if giants:
         feed.out=root/"evidence/adobe-giants/prepared-death"
+        feed.out.mkdir(exist_ok=True,parents=True)
+    if bomber:
+        feed.out=root/"evidence/adobe-bomber"
         feed.out.mkdir(exist_ok=True,parents=True)
     class Stream(socketserver.StreamRequestHandler):
         def handle(self):
@@ -138,12 +146,20 @@ def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,ma
                     def visible(step): return lambda s:s["page"]=="campaignGameScreen" and s["step"]==f"Step #{step}"
                     def settled(name,step,delay=2.5):
                         feed.until(visible(step),45); time.sleep(delay); feed.shot(name,visible(step))
-                    if archidon or shadow or magic or rebels or giants:
-                        feed.connection.sendall(b"F" if giants else b"E" if rebels else b"D" if magic else b"C" if shadow else b"B")
+                    if archidon or shadow or magic or rebels or giants or bomber:
+                        feed.connection.sendall(b"H" if bomber else b"F" if giants else b"E" if rebels else b"D" if magic else b"C" if shadow else b"B")
                         active=lambda s:s["page"]=="campaignGameScreen"
                         feed.until(active,30)
                         send(0x200,425,225)
                         feed.shot("entry",active)
+                        if bomber:
+                            assert sum(u["type"]==14 for u in feed.evidence["entry"]["units"])==6,feed.evidence["entry"]
+                            feed.connection.sendall(b"I")
+                            time.sleep(.7);feed.shot("prepared-throw",active)
+                            time.sleep(.5);feed.shot("prepared-rock",active)
+                            time.sleep(1);feed.shot("prepared-impact",active)
+                            time.sleep(2);feed.shot("prepared-bombers",active)
+                            return
                         if giants:
                             time.sleep(3); feed.shot("home",active)
                             feed.connection.sendall(b"G")
@@ -234,4 +250,5 @@ if __name__=="__main__":
     parser.add_argument("--magic",action="store_true")
     parser.add_argument("--rebels",action="store_true")
     parser.add_argument("--giants",action="store_true",help="prepare Giant death to inspect the original campaign cinematic")
-    args=parser.parse_args(); run(args.width,args.height,args.battle,args.reinforce,args.archidon,args.shadow,args.magic,args.rebels,args.giants)
+    parser.add_argument("--bomber",action="store_true",help="record CampaignBomber entry and a prepared original Giant throw")
+    args=parser.parse_args(); run(args.width,args.height,args.battle,args.reinforce,args.archidon,args.shadow,args.magic,args.rebels,args.giants,args.bomber)

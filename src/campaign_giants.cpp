@@ -9,7 +9,7 @@
 namespace sw2 {
 namespace {constexpr double radians=std::numbers::pi/180;}
 
-void CampaignTutorial::loadGiants(const std::filesystem::path& folder) {
+void CampaignTutorial::loadGiants(const std::filesystem::path& folder,bool scripted) {
     std::ifstream dialogue(folder/"dialogue.tsv"),events(folder/"events.tsv");
     for (std::string line;std::getline(dialogue,line);) {
         std::istringstream fields(line);
@@ -25,8 +25,10 @@ void CampaignTutorial::loadGiants(const std::filesystem::path& folder) {
         throw std::runtime_error("Incomplete Massive Battle controller");
     castleDead_.symbol=dead; castleDead_.enemy=true; castleDead_.facing=-1;
     castleDead_.position={length_-legacyWidth-110,-depth_/5}; castleDead_.altitude=390;
-    statues_[1].hp=180;
-    sound("GiantGrowl"+std::to_string(1+soundSequence_++%6),{length_-legacyWidth,depth_/2});
+    if (scripted) {
+        statues_[1].hp=180;
+        sound("GiantGrowl"+std::to_string(1+soundSequence_++%6),{length_-legacyWidth,depth_/2});
+    }
 }
 
 void CampaignTutorial::giantStrike(Unit& u) {

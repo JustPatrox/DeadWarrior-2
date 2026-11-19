@@ -42,7 +42,9 @@ SdlDisplay::SdlDisplay(SDL_Window* window,SDL_Renderer* renderer,const std::file
         else if(key=="vsync"&&numeric) vsync_=number==1;
         else if(key=="show_fps"&&numeric) fps_=number==1;
     }
-    SDL_SetRenderVSync(renderer_,vsync_ ? 1 : 0);mode(startup);save();
+    SDL_SetRenderVSync(renderer_,vsync_ ? 1 : 0);
+    if(startup==0&&resolution_>0) apply(resolutionChoice);
+    mode(startup);save();
 }
 int SdlDisplay::frameLimit() const {return rates[rate_].fps;}
 void SdlDisplay::mode(int next) {

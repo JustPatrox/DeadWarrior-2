@@ -33,11 +33,11 @@ This project is not affiliated with Max Games or the original game's creators. S
 
 ## Current status
 
-**Development build: the full campaign has not been ported yet.** Six missions are accessible, through Massive Battle. Unimplemented sections display a work-in-progress screen with restart and quit options.
+**Development build: the full campaign has not been ported yet.** Seven missions are accessible, through Explosive War. Unimplemented sections display a work-in-progress screen with restart and quit options.
 
 | Feature | Status |
 | --- | --- |
-| Menus, tutorial, and first six missions | Implemented; full parity is still under review |
+| Menus, tutorial, and first seven missions | Implemented; full parity is still under review |
 | Campaign progress, upgrades, and saves | Implemented for the current content |
 | 16:9 rendering, audio, and contextual cursors | Implemented |
 | Windowed, borderless window, and fullscreen modes | Available in the Insert menu |
@@ -52,7 +52,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 ## Download and play
 
-**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.2)**
+**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.3)**
 
 | Platform | Release asset | Start |
 | --- | --- | --- |
@@ -63,7 +63,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 All packages include assets. Keep Linux/Windows assets beside the executable; macOS keeps them inside the app. macOS builds have an ad-hoc integrity signature, without Developer ID notarization. Linux builds target Ubuntu 22.04 or newer compatible distributions (glibc 2.35+), with desktop graphics and audio libraries.
 
-This is an unfinished campaign preview with six missions; it is not the complete game. The first macOS/Linux packages add the platform layer to the preview.2 campaign sources. Automated checks are supplemented by ongoing gameplay validation.
+This is an unfinished campaign preview with seven missions; it is not the complete game. All four native packages use the same campaign sources and prepared content. Automated checks are supplemented by ongoing gameplay validation.
 
 ## Build from source
 

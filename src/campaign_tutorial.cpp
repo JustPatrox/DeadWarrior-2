@@ -5,6 +5,7 @@
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace sw2 {
@@ -103,6 +104,8 @@ int CampaignTutorial::spawn(int symbol,Point p,bool enemy) {
     const auto& bounds=art_.texture(pose.symbol,pose.frameBase+1).bounds;
     u.width=bounds.w; u.height=bounds.h;
     units_.push_back(u);
+    if (symbol==enslavedGiant || (symbol==giant && mission_>=6))
+        sound("GiantGrowl"+std::to_string(1+soundSequence_++%6),p);
     return int(units_.size())-1;
 }
 double CampaignTutorial::stat(const Unit& u,const char* name) const {
@@ -111,7 +114,18 @@ double CampaignTutorial::stat(const Unit& u,const char* name) const {
 double CampaignTutorial::stat(int symbol,const char* name) const {
     const char* prefix=symbol==miner ? "miner." : symbol==spearton ? "spearton." : symbol==archer ? "archer." : symbol==ninja ? "ninja." :
         symbol==wizard ? "magikill." : symbol==healer ? "monk." : symbol==chaosMiner ? "chaosMiner." :
-        symbol==giant ? "giant." : symbol==enslavedGiant ? "enslavedGiant." : symbol==medusa ? "medusa." : symbol==dead ? "dead." : "swordwrath.";
+        symbol==giant ? "giant." : symbol==enslavedGiant ? "enslavedGiant." : symbol==medusa ? "medusa." : symbol==dead ? "dead." : symbol==bomber ? "bomber." : "swordwrath.";
+    if (std::string_view(name)=="hitWidth" || std::string_view(name)=="hitHeight") {
+        if (const auto found=rules_.find(std::string(prefix)+name);found!=rules_.end()) return found->second;
+        const auto& pose=animations_.at({symbol,"stand"});
+        const auto box=art_.texture(pose.symbol,pose.frameBase+1).bounds;
+        return (std::string_view(name)=="hitWidth" ? box.w : box.h)*stat(symbol,"scale");
+    }
+    if (symbol==enslavedGiant && (std::string_view(name)=="health" || std::string_view(name)=="scale")) {
+        const bool health=std::string_view(name)=="health";
+        if (upgrades_[20]) return rules_.at(health ? "enslavedGiant.healthII" : "enslavedGiant.growthIIScale");
+        if (upgrades_[16]) return rules_.at(health ? "enslavedGiant.healthI" : "enslavedGiant.growthIScale");
+    }
     return rules_.at(std::string(prefix)+name);
 }
 double CampaignTutorial::scale(const Unit& u) const {
@@ -171,8 +185,16 @@ void CampaignTutorial::updateUnit(Unit& u) {
     if (u.hp>0 && u.healTicks>0) {u.hp=std::min(u.maxHp,u.hp+u.healAmount); --u.healTicks;}
     if (u.cloakTicks>0) --u.cloakTicks;
     if (u.cloakCooldown>0) --u.cloakCooldown;
-    if (u.stunned>0) --u.stunned;
+    if (u.symbol==giant || u.symbol==enslavedGiant) u.stunned=0;
+    else if (u.stunned>0) --u.stunned;
     if (u.hp<=0) {
+        if (u.symbol==bomber) {
+            if (!u.deadCounted) {
+                (u.enemy ? enemyPopulation_ : population_)-=int(stat(u,"population"));
+                u.deadCounted=true;detonate(u);
+            }
+            return;
+        }
         if (!u.deadCounted) {
             (u.enemy ? enemyPopulation_ : population_)-=int(stat(u,"population")); u.deadCounted=true;
             sound(u.symbol==wizard ? "MagikillDeath" : "Pain"+std::to_string(1+soundSequence_++%8),u.position);
@@ -191,6 +213,8 @@ void CampaignTutorial::updateUnit(Unit& u) {
         // The cast animation advances below and retains its authored event frame.
     } else if (u.symbol==archer) {
         force=updateArcher(u);
+    } else if (u.symbol==enslavedGiant) {
+        force=updateEnslavedGiant(u);attacking=u.pose.starts_with("attack_");
     } else if (u.canFight && u.order==Order::Attack && !attacking && !u.stunned) {
         auto& enemy=combatTarget(u.target);
         if (enemy.hp<=0) { u.order=u.engageOnMove ? Order::Move : Order::Stand; }
@@ -203,6 +227,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
             }
             const int facing=dx<0 ? -1 : 1;
             if (std::abs(dx)<reach && std::abs(dy)<40 && u.facing==facing) {
+                if (u.symbol==bomber) {u.hp=0;return;}
                 animate(u,(u.symbol!=sword && u.symbol!=ninja && u.symbol!=giant) || random()%2==0 ? "attack_1" : "attack_2"); u.hit=false;
                 u.targetsHit=0;
                 if (u.symbol==ninja) sound("ninjaSwipe"+std::to_string(1+soundSequence_++%4),u.position);
@@ -210,8 +235,11 @@ void CampaignTutorial::updateUnit(Unit& u) {
                 attacking=true;
             } else if (!u.hold) {
                 u.facing=facing;
-                force.x=std::abs(dx)<reach*.9 ? 0 : (dx-facing*reach*.5)/100;
-                if (std::abs(dx)<200) force.y=dy;
+                if (u.symbol==bomber && dx*dx+dy*dy<150000) force={dx/30,dy};
+                else {
+                    force.x=std::abs(dx)<reach*.9 ? 0 : (dx-facing*reach*.5)/100;
+                    if (std::abs(dx)<200) force.y=dy;
+                }
             }
         }
     } else if (!u.stunned && u.order==Order::Gather) {
@@ -227,6 +255,10 @@ void CampaignTutorial::updateUnit(Unit& u) {
         const auto& seq=animations_.at({u.symbol,u.pose});
         auto marker=tips_.find({seq.symbol,u.frame});
         if (u.symbol==giant) giantStrike(u);
+        else if (u.symbol==enslavedGiant) {
+            if (u.frame==1) sound("BoulderThrowSound",u.position);
+            if (u.frame==33 && !u.hit) {throwBoulder(u);u.hit=true;}
+        }
         else if (!u.hit && marker!=tips_.end()) {
             auto& target=combatTarget(u.target);
             const double size=scale(u);
@@ -606,6 +638,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         layers.emplace_back(p.y+3,sprite(1051,1,{p.x-camera_,battlefieldY_+p.y+3},size));
     }
     for (const auto& u:units_) {
+        if (u.symbol==bomber && u.deadCounted) continue;
         const double size=scale(u),x=u.position.x-camera_,y=battlefieldY_+u.position.y;
         const auto& seq=animations_.at({u.symbol,u.pose});
         auto layer=[&](Draw d){layers.emplace_back(u.position.y,std::move(d));};
@@ -655,6 +688,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
     if (enemyCastleArcher_) drawCastleArcher(layers,true);
     if (chaosOpponent_) drawCastleDead(layers);
     drawArrows(layers);
+    drawBoulders(layers);
     drawMagic(layers);
     std::stable_sort(layers.begin(),layers.end(),[](const auto& a,const auto& b){return a.first<b.first;});
     for (auto& item:layers) out.push_back(std::move(item.second));
@@ -701,7 +735,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
     } else if (selected!=units_.end()) {
         const int portrait=selected->symbol==miner ? 1447 : selected->symbol==spearton ? 1366 :
             selected->symbol==archer ? 1509 : selected->symbol==ninja ? 1272 : selected->symbol==wizard ? 1531 :
-            selected->symbol==healer ? 1480 : 1244;
+            selected->symbol==healer ? 1480 : selected->symbol==enslavedGiant ? 1314 : 1244;
         out.push_back(sprite(portrait,1,{598,645}));
         out.push_back(sprite(2311,1,{813,642}));
         out.push_back(sprite(6457,1,{813,678}));

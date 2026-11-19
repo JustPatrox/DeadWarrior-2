@@ -20,7 +20,7 @@ def run():
     OUT.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory() as temporary:
         folder=Path(temporary);options=folder/"options.ini";save=folder/"campaign.sav"
-        save.write_text("DeadWarrior2-Campaign 1\n6 6 1 000000000000000000010\n"+"220 220 1\n"*6+"-1 0 0\n"*8)
+        save.write_text("DeadWarrior2-Campaign 1\n7 7 1 000000000000000000010\n"+"220 220 1\n"*7+"-1 0 0\n"*7)
         sentinel=folder/"unrelated.txt";sentinel.write_text("preserve")
         def settings():
             parser=configparser.ConfigParser();parser.read(options);return dict(parser['Display'])

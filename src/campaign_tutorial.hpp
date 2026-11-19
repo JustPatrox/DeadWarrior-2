@@ -41,6 +41,7 @@ public:
         std::array<int,3> spells{};
         int giants{},giantHits{},cinematic{-1},dialogue{-1};
         double giantHealth{};
+        int bombers{},bomberWaves{},nextBomberWave{},explosions{},boulderShots{},boulderHits{},enslavedGiants{};
     };
     BattleStatus battleStatus() const;
     bool showingResults() const;
@@ -107,7 +108,7 @@ private:
     int enemyGold_{},enemyMana_{},enemyPopulation_{};
     struct Training {int symbol{}; double gold{},mana{};};
     struct ProductionQueue {std::deque<Training> units; int elapsed{};};
-    std::array<std::array<ProductionQueue,5>,2> production_{};
+    std::array<std::array<ProductionQueue,6>,2> production_{};
     std::array<Unit,2> statues_{};
     Unit wall_;
     bool reinforcement_{};
@@ -123,7 +124,7 @@ private:
     std::array<double,2> median_{};
     static constexpr int ownStatue=-2,opposingStatue=-3,ownWall=-4;
     static constexpr int sword=4922,miner=3104,spearton=6456,archer=4236,ninja=7289,wizard=7926,healer=8233,
-        giant=7025,chaosMiner=7323,enslavedGiant=7526,medusa=8061,dead=8529;
+        giant=7025,chaosMiner=7323,enslavedGiant=7526,medusa=8061,dead=8529,bomber=8774;
     static bool isWorker(int symbol) {return symbol==miner || symbol==chaosMiner;}
     int mission_{},ownStatueFrame_{1},enemyStatueFrame_{10},mobileShots_{},hint_{},hintTicks_{};
     bool chaosOpponent_{};
@@ -152,7 +153,7 @@ private:
     int enemyBowFrame_{1},enemyArcherFrame_{1},enemyCastleShots_{};
     double enemyBowAngle_{};
     bool enemyCastleArcher_{};
-    struct MagicEffect {int symbol{},frame{1}; Point start{},end{}; bool enemy{}; double depth{};};
+    struct MagicEffect {int symbol{},frame{1}; Point start{},end{}; bool enemy{}; double depth{},damage{-1};};
     std::vector<MagicEffect> magic_;
     int magicHits_{},heals_{};
     std::array<int,3> spells_{};
@@ -165,6 +166,15 @@ private:
     std::vector<Dialogue> dialogue_;
     std::vector<int> rebels_;
     std::map<std::pair<int,int>,bool> giantHitFrames_;
+    int nextBomberWave_{2},bomberWaves_{},explosions_{},boulderShots_{},boulderHits_{};
+    struct BoulderFlight {
+        double x{},depth{},z{},dx{},dy{},dz{},rotation{},spin{},size{1},previousDistance{};
+        Point drawPosition{};
+        double drawDepth{},drawRotation{};
+        bool enemy{},debris{},struck{},hidden{};
+        int target{-1},age{};
+    };
+    std::vector<BoulderFlight> boulders_;
     static constexpr Rect minimap{305.2,578.05,231,44};
     int random();
     int spawn(int symbol,Point p,bool enemy=false);
@@ -212,7 +222,7 @@ private:
     void drawCastleArcher(std::vector<std::pair<double,Draw>>&,bool enemy=false) const;
     void drawArrows(std::vector<std::pair<double,Draw>>&) const;
     void configureCampaign(const std::filesystem::path&,const CampaignProgress&);
-    void loadGiants(const std::filesystem::path&);
+    void loadGiants(const std::filesystem::path&,bool cinematic=true);
     void updateGiants();
     void updateCinematic();
     void speak(int);
@@ -221,6 +231,12 @@ private:
     void updateCastleDead();
     void drawCastleDead(std::vector<std::pair<double,Draw>>&) const;
     void drawCinematic(std::vector<Draw>&) const;
+    void updateBomberController();
+    void detonate(Unit&);
+    Point updateEnslavedGiant(Unit&);
+    void throwBoulder(Unit&);
+    void updateBoulders();
+    void drawBoulders(std::vector<std::pair<double,Draw>>&) const;
     void createMiningBlocks();
     void updateArchidon();
     Point updateArcher(Unit&);

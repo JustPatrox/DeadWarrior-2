@@ -27,6 +27,16 @@ env:
 jobs:
   native:
     name: Build and test ${{ matrix.package }}
+    if: >-
+      github.event_name != 'release' ||
+      !contains(github.event.release.assets.*.name, 'DeadWarrior-2-Linux-x64.tar.gz') ||
+      !contains(github.event.release.assets.*.name, 'DeadWarrior-2-macOS-arm64.zip') ||
+      !contains(github.event.release.assets.*.name, 'DeadWarrior-2-macOS-x64.zip') ||
+      !contains(github.event.release.assets.*.name, 'DeadWarrior-2-Windows-x64.zip')
+    # Draft releases require push access. The token is supplied only to the
+    # asset-download step, not to dependency builds or gameplay executables.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -65,17 +75,14 @@ jobs:
           sudo apt-get install -y ninja-build libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libegl1-mesa-dev libdrm-dev libgbm-dev xvfb
       - name: Configure native build
         if: runner.os != 'Windows'
-        run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+        run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DDW2_RELEASE_VERSION="$RELEASE_TAG" -DDW2_BUNDLE_BUILD="${{ github.run_number }}"
       - name: Configure Windows build
         if: runner.os == 'Windows'
         run: cmake -S . -B build/native -G 'Visual Studio 17 2022' -A x64
       - name: Compile native game and campaign probes
-        run: cmake --build build/native --config Release --parallel 3 --target DeadWarrior2 tutorial_probe archidon_probe magic_probe rebels_probe giants_probe
+        run: cmake --build build/native --config Release --parallel 3 --target DeadWarrior2 campaign_probes
       - name: Run deterministic campaign checks
-        run: |
-          suffix=''; directory='build/native'
-          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; directory="$directory/Release"; fi
-          for probe in tutorial archidon magic rebels giants; do "$directory/${probe}_probe$suffix" assets; done
+        run: ctest --test-dir build/native -C Release --output-on-failure
       - name: Install ready-to-play package
         run: cmake --install build/native --config Release --prefix out/package
       - name: Test Linux window, renderer, input, audio, pause and saves
@@ -94,9 +101,15 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
-          name: ${{ matrix.package }}
+          name: ${{ matrix.package }}-package
+          compression-level: 0
+          path: out/releases/*
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: ${{ matrix.package }}-checks
           path: |
-            out/releases/*
             out/checks/*
             out/test-save/lastest.log
           if-no-files-found: warn

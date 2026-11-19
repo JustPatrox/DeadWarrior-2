@@ -112,7 +112,7 @@ void CampaignTutorial::updateMagic() {
             double damage=0;
             if (effect.symbol==3172 && effect.frame==3) {
                 hit=std::hypot(target.position.x-point.x,target.position.y-point.y)<rules_.at("nuke.radius");
-                damage=stat(wizard,"nuke.damage");
+                damage=effect.damage>=0 ? effect.damage : stat(wizard,"nuke.damage");
             } else if (effect.symbol==3120 && ticks_%int(stat(wizard,"electricWall.frequency"))==0) {
                 hit=std::abs(target.position.x-point.x)<stat(wizard,"electricWall.area");
                 damage=stat(wizard,"electricWall.damage");

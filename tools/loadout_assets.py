@@ -4,7 +4,7 @@ import re
 
 ROOT=Path(__file__).resolve().parents[1]
 CLASSES=("Miner","Swordwrath","Spearton","Archer","Ninja","Magikill","Monk","Giant",
-         "EnslavedGiant","Dead","Medusa","MinerChaos")
+         "EnslavedGiant","Dead","Medusa","MinerChaos","Bomber")
 
 def freeze_default_loadouts(c,overrides=None):
     properties=set()

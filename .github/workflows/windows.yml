@@ -39,6 +39,6 @@ jobs:
       - name: Configure
         run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64
       - name: Compile game and diagnostic probes
-        run: cmake --build build/windows --config Release --parallel --target DeadWarrior2 tutorial_probe archidon_probe magic_probe rebels_probe giants_probe audio_probe
+        run: cmake --build build/windows --config Release --parallel --target DeadWarrior2 campaign_probes audio_probe
       # Gameplay probes run locally after preparing the user's own assets.
       # CI does not fetch or publish original game resources.

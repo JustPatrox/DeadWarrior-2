@@ -1,5 +1,5 @@
 param([string]$Configuration = 'Release', [switch]$CheckTutorial, [switch]$CheckArchidon,
-    [switch]$CheckMagic, [switch]$CheckRebels, [switch]$CheckAudio, [switch]$CheckGiants)
+    [switch]$CheckMagic, [switch]$CheckRebels, [switch]$CheckAudio, [switch]$CheckGiants, [switch]$CheckBomber)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -26,7 +26,7 @@ if ($CheckArchidon) {
     & (Join-Path (Get-Location) "build/windows/$Configuration/archidon_probe.exe") assets
     if ($LASTEXITCODE) {throw 'Archidon simulation failed'}
 }
-foreach ($check in @(@($CheckMagic,'magic_probe'),@($CheckRebels,'rebels_probe'),@($CheckAudio,'audio_probe'),@($CheckGiants,'giants_probe'))) {
+foreach ($check in @(@($CheckMagic,'magic_probe'),@($CheckRebels,'rebels_probe'),@($CheckAudio,'audio_probe'),@($CheckGiants,'giants_probe'),@($CheckBomber,'bomber_probe'))) {
     if (!$check[0]) {continue}
     $target = $check[1]
     & $cmake --build build/windows --config $Configuration --target $target --parallel
