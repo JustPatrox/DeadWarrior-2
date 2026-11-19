@@ -1,21 +1,21 @@
-name: Proponer una mejora
-description: Una mejora de la experiencia de PC o de las herramientas.
+name: Feature request
+description: Suggest an improvement to the PC experience or tools.
 title: "[Feature]: "
 labels: [enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: ¿Qué problema resuelve?
+      label: What problem does this solve?
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
-      label: Comportamiento propuesto
+      label: Proposed behavior
     validations:
       required: true
   - type: textarea
     id: context
     attributes:
-      label: Contexto o referencias
+      label: Context or references

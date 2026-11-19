@@ -1,11 +1,11 @@
-# Créditos y contenido de terceros
+# Credits and third-party content
 
-DeadWarrior 2 es un proyecto independiente de port a C++ de Stick War 2. No está afiliado con Max Games ni con los creadores del juego original.
+DeadWarrior 2 is an independent project to port Stick War 2 to C++. It is not affiliated with Max Games or the original game's creators.
 
-El nombre Stick War 2, sus personajes, niveles, arte, música, efectos y demás contenido original pertenecen a sus respectivos titulares. El repositorio no incluye el SWF del juego ni la extracción de esos recursos. Las herramientas trabajan localmente con el archivo que aporte cada usuario.
+The Stick War 2 name, characters, levels, artwork, music, sound effects, and other original content belong to their respective owners. The repository does not include the game SWF or an extraction of those resources. Preparation tools operate locally on the file supplied by each user.
 
-El logo de DeadWarrior 2 y el icono de casco han sido aportados por el responsable del proyecto. El logo de Max Games aportado se conserva como parte del aviso inicial de no afiliación.
+The DeadWarrior 2 logo and helmet icon were supplied by the project owner. The supplied Max Games logo is retained for the startup non-affiliation notice.
 
-Las dependencias de preparación —JPEXS FFDec, Java, Pillow, NumPy, JPype e imageio-ffmpeg— se obtienen por separado y conservan sus propias licencias.
+Preparation dependencies — JPEXS FFDec, Java, Pillow, NumPy, JPype, and imageio-ffmpeg — are obtained separately and retain their own licenses.
 
-El proyecto todavía no ha elegido una licencia de distribución para su código. No se aplica una licencia nueva a los recursos originales ni a las marcas mediante este archivo.
+A distribution license for this project's code has not yet been selected. This notice does not apply a new license to original game resources or trademarks.

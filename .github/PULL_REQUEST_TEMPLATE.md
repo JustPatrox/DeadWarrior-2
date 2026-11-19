@@ -1,11 +1,11 @@
-## Cambio
+## Change
 
-Describe el problema y el comportamiento que tendrá después del cambio.
+Describe the problem and the resulting behavior.
 
-## Validación
+## Validation
 
-Indica los comandos y pruebas ejecutados, resolución y resultados. Si no pudiste probar algo, indícalo.
+List commands and tests performed, resolution, and results. Clearly identify anything you could not test.
 
-## Referencia y pendientes
+## Reference and remaining work
 
-Para cambios de juego, menciona las clases originales comparadas y cualquier diferencia pendiente. No adjuntes el SWF ni recursos extraídos.
+For gameplay changes, identify the original classes compared and any remaining differences. Do not attach the SWF or extracted resources.

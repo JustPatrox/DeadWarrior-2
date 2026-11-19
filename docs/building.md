@@ -1,20 +1,20 @@
-# Compilar desde tu propia copia del juego
+# Building from your own copy of the game
 
-La fase actual es Windows x64. El repositorio distribuye código, herramientas y branding; los recursos del juego se generan en tu equipo.
+The current target is Windows x64. The repository distributes source, tools, and branding; game resources are generated on your computer.
 
-## Dependencias
+## Dependencies
 
-| Herramienta | Versión usada / requisito | Fuente |
+| Tool | Tested version / requirement | Source |
 | --- | --- | --- |
-| Visual Studio | 2022 o 2026, escritorio C++ x64 y herramientas CMake | [Microsoft](https://visualstudio.microsoft.com/downloads/) |
-| CMake | 3.24 o superior; el script usa el incluido con Visual Studio | [CMake](https://cmake.org/download/) |
+| Visual Studio | 2022 or 2026, desktop C++ x64 and CMake tools | [Microsoft](https://visualstudio.microsoft.com/downloads/) |
+| CMake | 3.24 or later; the script uses Visual Studio's bundled version | [CMake](https://cmake.org/download/) |
 | Python | 3.11 x64 | [Python](https://www.python.org/downloads/windows/) |
-| Java | 21 x64, JRE o JDK; probado con Temurin 21.0.13+9 | [Eclipse Temurin](https://adoptium.net/temurin/releases/?version=21) |
-| JPEXS FFDec | ZIP completo de 26.5.0, con su carpeta `lib` | [JPEXS](https://github.com/jindrapetrik/jpexs-decompiler/releases/tag/version26.5.0) |
+| Java | 21 x64, JRE or JDK; tested with Temurin 21.0.13+9 | [Eclipse Temurin](https://adoptium.net/temurin/releases/?version=21) |
+| JPEXS FFDec | Complete 26.5.0 ZIP, including its `lib` directory | [JPEXS](https://github.com/jindrapetrik/jpexs-decompiler/releases/tag/version26.5.0) |
 
-No hace falta instalar Flash Player ni un emulador para ejecutar el port. Algunas herramientas opcionales de comparación con el original utilizan reproductores de referencia y Playwright, que no son dependencias del juego.
+Flash Player and emulation software are not required to run the port. Optional comparison tools use reference players and Playwright; these are not game dependencies.
 
-## Preparar los recursos
+## Prepare resources
 
 ```powershell
 git clone https://github.com/JustPatrox/DeadWarrior-2.git
@@ -23,46 +23,46 @@ python -m venv work/venv
 work/venv/Scripts/python.exe -m pip install -r requirements-assets.txt
 ```
 
-Obtén Java y FFDec desde sus fuentes oficiales y extrae sus ZIP completos. Puedes colocarlos en cualquier ruta; por ejemplo, `work/tools/java-21` y `work/tools/ffdec`.
+Obtain Java and FFDec from their official sources and extract their complete ZIPs. They can live anywhere; for example, `work/tools/java-21` and `work/tools/ffdec`.
 
-Aporta tu copia de `stickwar2.swf`. La revisión compatible tiene **18 886 237 bytes** y SHA-256:
+Supply your copy of `stickwar2.swf`. The compatible revision is **18,886,237 bytes**, with SHA-256:
 
 ```text
 03aa17bc25851fb14aefbe9a7223c738f427bff22580e16ec93e5e1232b167b5
 ```
 
-El preparador rechaza otras revisiones porque los símbolos y las reglas se han traducido desde esta. No descarga el juego y no modifica el archivo original.
+The preparer rejects other revisions because symbol IDs and rules were translated from this version. It does not download the game or modify the original file.
 
 ```powershell
 work/venv/Scripts/python.exe tools/prepare_assets.py `
-  --swf "C:\ruta\a\stickwar2.swf" `
-  --java-home "C:\ruta\a\java-21" `
-  --ffdec-home "C:\ruta\a\ffdec" `
+  --swf "C:\path\to\stickwar2.swf" `
+  --java-home "C:\path\to\java-21" `
+  --ffdec-home "C:\path\to\ffdec" `
   --check
 ```
 
-Quita `--check` para extraer y compilar los recursos. El proceso necesita varios GB de memoria y espacio para miles de archivos. Cada etapa escribe `work/assets-NN.log`; la extracción escribe `work/extract.log`.
+Remove `--check` to extract and compile resources. Preparation needs several GB of memory and space for thousands of files. Each stage writes `work/assets-NN.log`; extraction writes `work/extract.log`.
 
-`--reuse-extraction` permite reutilizar `work/extract` cuando ya existe el inventario correspondiente al mismo SWF. Regenera igualmente los recursos nativos. Los compiladores individuales siguen disponibles para actualizar solo un módulo; consulta [windows.md](windows.md).
+Use `--reuse-extraction` to reuse `work/extract` when its matching SWF inventory already exists. Native resources are still regenerated. Individual module compilers remain available for targeted updates; see [windows.md](windows.md).
 
-## Compilar el ejecutable
+## Build the executable
 
 ```powershell
 .\tools\build_windows.ps1
 & '.\out\windows-x64\DeadWarrior 2.exe'
 ```
 
-La salida contiene el ejecutable y `assets/`. Conserva ambos juntos al mover tu instalación local. Las partidas se guardan en `%LOCALAPPDATA%\DeadWarrior 2\campaign.sav`.
+The output contains the executable and `assets/`. Keep both together when moving your local installation. Saves are stored in `%LOCALAPPDATA%\DeadWarrior 2\campaign.sav`.
 
-Para comprobar las simulaciones y el audio:
+To check simulations and audio:
 
 ```powershell
 .\tools\build_windows.ps1 -CheckTutorial -CheckArchidon -CheckMagic -CheckRebels -CheckGiants -CheckAudio
 ```
 
-## Comprobaciones sin los recursos del juego
+## Checks without game resources
 
-La compilación de código no requiere el SWF. En una terminal con CMake y Visual Studio:
+The source build does not require the SWF. In a terminal with CMake and Visual Studio:
 
 ```powershell
 cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64
@@ -71,4 +71,4 @@ python -m compileall -q tools
 python tools/check_repository.py
 ```
 
-Ese ejecutable todavía necesita la preparación de recursos para jugar. GitHub Actions compila el juego y los probes, sin ejecutar partidas ni publicar una instalación con recursos originales. Los informes y capturas mencionados en la documentación de desarrollo son archivos locales excluidos de la publicación.
+The resulting executable still needs prepared resources to play. GitHub Actions compiles the game and diagnostic probes without running gameplay or publishing original game content. Reports and captures mentioned in development documentation are local files excluded from the public repository.

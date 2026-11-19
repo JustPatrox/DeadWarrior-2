@@ -1,40 +1,40 @@
-name: Reportar un fallo
-description: Un problema de juego, gráficos, audio, entrada o compilación.
+name: Bug report
+description: Report a gameplay, graphics, audio, input, or build problem.
 title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: "Gracias por probar DeadWarrior 2. No adjuntes el SWF ni recursos extraídos. Revisa los logs por si contienen rutas personales."
+      value: "Thanks for testing DeadWarrior 2. Do not attach the SWF or extracted resources. Review logs for personal paths before posting."
   - type: input
     id: version
     attributes:
-      label: Versión o commit
-      placeholder: Por ejemplo, el hash de git rev-parse --short HEAD
+      label: Version or commit
+      placeholder: For example, the output of git rev-parse --short HEAD
     validations:
       required: true
   - type: input
     id: system
     attributes:
-      label: Entorno
-      description: Windows, GPU, resolución, modo de pantalla, límite de FPS y V-Sync.
+      label: Environment
+      description: Windows version, GPU, resolution, display mode, FPS limit, and V-Sync setting.
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Pasos para reproducirlo
-      placeholder: "1. Abrir...\n2. Pulsar...\n3. Observar..."
+      label: Steps to reproduce
+      placeholder: "1. Open...\n2. Click...\n3. Observe..."
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Resultado esperado y resultado actual
+      label: Expected and actual behavior
     validations:
       required: true
   - type: textarea
     id: log
     attributes:
-      label: Log y capturas
-      description: Arrastra lastest.log aquí. Se reemplaza al iniciar el juego; guarda una copia antes de abrirlo otra vez.
+      label: Log and screenshots
+      description: Drag lastest.log here. It is replaced on launch, so save a copy before opening the game again.

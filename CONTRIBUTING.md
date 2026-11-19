@@ -1,22 +1,22 @@
-# Contribuir a DeadWarrior 2
+# Contributing to DeadWarrior 2
 
-Gracias por ayudar a probar o desarrollar el port. La prioridad actual es Windows x64 y la correspondencia con las reglas del original.
+Thank you for helping test or develop the port. The current priority is Windows x64 and preserving the original game's rules.
 
-## Preparar el entorno
+## Set up your environment
 
-Sigue [la guía de compilación](docs/building.md). Cada colaborador aporta su propia copia compatible del SWF. No subas el original, scripts decompilados, recursos generados, ejecutables, guardados, logs ni capturas de pruebas al árbol de código.
+Follow the [build guide](docs/building.md). Each contributor supplies their own compatible SWF. Do not commit the original game, decompiled scripts, generated resources, executables, saves, logs, or test captures to the source tree.
 
-## Proponer un cambio
+## Propose a change
 
-1. Abre una rama a partir de `main`.
-2. Mantén el cambio centrado en un problema o comportamiento concreto.
-3. Para cambios jugables, indica las clases o reglas originales usadas como referencia y las diferencias que siguen pendientes.
-4. Compila Windows y ejecuta las comprobaciones relacionadas con el cambio.
-5. Abre un pull request con el resultado esperado y las pruebas realizadas.
+1. Create a branch from `main`.
+2. Keep the change focused on a specific problem or behavior.
+3. For gameplay changes, identify the original classes or rules used as references and any remaining differences.
+4. Build Windows and run checks appropriate to the change.
+5. Open a pull request describing the expected behavior and validation performed.
 
-Conserva la simulación a 30 Hz separada del renderizado, las proporciones de los recursos y el área de presentación 16:9. No declares validado un comportamiento sin probarlo.
+Keep the 30 Hz simulation separate from rendering, preserve resource proportions, and retain the 16:9 presentation area. Do not describe a behavior as validated unless it has been tested.
 
-## Comprobaciones
+## Checks
 
 ```powershell
 python -m compileall -q tools
@@ -24,6 +24,6 @@ python tools/check_repository.py
 .\tools\build_windows.ps1 -CheckTutorial -CheckArchidon -CheckMagic -CheckRebels -CheckGiants -CheckAudio
 ```
 
-El último comando necesita recursos preparados. Las pruebas de interfaz se describen en [docs/windows.md](docs/windows.md); las capturas e informes se generan localmente bajo `evidence/` y `work/`.
+The last command requires prepared assets. Interface tests are documented in [docs/windows.md](docs/windows.md). Captures and reports are generated locally under `evidence/` and `work/`.
 
-Los reportes deben incluir pasos reproducibles, versión o commit, resolución y `lastest.log` cuando sea pertinente. Utiliza las plantillas de Issues y no incluyas datos personales.
+Reports should include reproduction steps, version or commit, resolution, and `lastest.log` when relevant. Use the issue templates and avoid including personal information.
