@@ -113,9 +113,9 @@ def banner_check(width=1280,height=720):
                     if trace.exists() and trace.read_text().splitlines()[-1].startswith("27\t"): break
                     time.sleep(.1)
                 else: raise AssertionError("Battle did not open")
-                click(506,683)
+                click(344,683)
                 assert user.SendMessageW(hwnd,0x8000+18,0,0)&2,"Pending button did not show banner"
-                assert "UNAVAILABLE button=HUD.menuButton symbol=10084" in LOG.read_text()
+                assert "UNAVAILABLE button=HUD.highButton symbol=10102" in LOG.read_text()
                 capture_from_game(hwnd,capture).save(OUT/"pending-button.png")
                 time.sleep(6.2); assert not user.SendMessageW(hwnd,0x8000+18,0,0)&2
                 limits=[]

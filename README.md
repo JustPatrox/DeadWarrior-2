@@ -42,7 +42,9 @@ This project is not affiliated with Max Games or the original game's creators. S
 | 16:9 rendering, audio, and contextual cursors | Implemented |
 | Windowed, borderless window, and fullscreen modes | Available in the Insert menu |
 | 30 / 60 / 120 / 240 FPS or unlimited | Available |
-| V-Sync and FPS counter | Available |
+| V-Sync, FPS counter, and render resolution | Available |
+| Original campaign pause menu | MENU, Esc, or P |
+| Persistent PC settings | Saved in `options.ini` |
 | Remaining campaign and cutscenes | Pending |
 | macOS and Linux | Pending; after Windows validation |
 
@@ -50,7 +52,7 @@ CI checks the Windows source build and Python tools. Gameplay tests require loca
 
 ## Download and play
 
-**[Download the Windows development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.1)**
+**[Download the Windows development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.2)**
 
 1. Download `DeadWarrior-2-Windows-x64.zip` from the release assets.
 2. Extract the entire ZIP to a folder.
@@ -80,9 +82,10 @@ See the [build guide](docs/building.md) for details. Preparing resources from an
 | **F11** | Toggle fullscreen |
 | **Arrow keys / Tab** | Navigate PC settings |
 | **Enter / Space** | Change the selected option |
-| **Esc** | Close PC settings |
+| **Esc** | Close PC settings or pause/resume the battle |
+| **P** | Pause/resume the battle |
 
-Use **Insert → Show FPS → On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate.
+Use **Insert → Show FPS → On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
 
 ## Reporting a problem
 

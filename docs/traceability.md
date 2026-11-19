@@ -66,3 +66,9 @@ This table maps the original AS3 classes and symbol IDs to the native implementa
 Music gain follows `0.2 * volumeMap(name)`. An isolated native menu session measured peak 0.222104 with `loginMusic` gain 0.672; the earlier combined music/voice/effect test did not isolate the music contribution.
 
 The complete campaign, natural combat parity, remaining cinematics, broader DPI coverage, and all interface states remain unfinished. The seventh territory currently opens the work-in-progress screen. No macOS or Linux implementation is claimed.
+
+## Native pause and PC settings
+
+`CampaignPauseMenu`, `PauseMenu`, and `UserInterface.pauseButton` map to `src/pause_menu.cpp` and the Windows input/clock integration. The original panel (9964), shield (9951), static labels, text-button hover states (9915/9919/9957/9958), confirmation (9963/9939/9946), and sound/music toggle (9928) are compiled by `tools/build_pause_assets.py`. The normal text-button up states are transparent; hit testing uses their visible hover-state bounds. Native restart/quit confirmations and an offline control guide complete the PC interaction.
+
+Requested PC resolution and persistence are implemented in `windows_display.cpp`: fixed 16:9 render sizes or Auto, uniform presentation, work-area window fitting, and atomic `options.ini` writes. The renderer reports actual Direct2D buffer dimensions for native tests. Pause tests verify frozen simulation ticks and 15 resumed ticks over half a second; audio tests compare narration sample positions across pause/resume and measure independent channel output. Both revised notice strings are rendered by the native executable.

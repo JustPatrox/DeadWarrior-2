@@ -18,6 +18,8 @@
 
 # Saves, logs and diagnostics
 *.sav
+options.ini
+options.ini.tmp
 *.log
 *.dmp
 *.stackdump

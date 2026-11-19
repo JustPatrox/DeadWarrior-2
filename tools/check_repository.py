@@ -17,6 +17,7 @@ def main():
         if (path.parts[0] in {"work", "build", "out", "dist", "evidence", ".vs", ".venv"}
                 or (name.startswith("assets/") and name not in ALLOWED_ASSETS)
                 or path.suffix.lower() in {".swf", ".fla", ".exe", ".dll", ".sav", ".log", ".pem", ".key"}
+                or path.name in {"options.ini", "options.ini.tmp"}
                 or "__pycache__" in path.parts or path.name.startswith(".env")):
             errors.append("Local/generated file is tracked: " + name)
         if (ROOT / name).stat().st_size > 10 * 1024 * 1024:

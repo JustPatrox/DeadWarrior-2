@@ -23,16 +23,22 @@ public:
     void stopMusic();
     void stopNarration();
     void setMuted(bool muted);
+    void setSoundEnabled(bool);
+    void setMusicEnabled(bool);
+    void setPaused(bool);
+    bool soundEnabled() const { return soundEnabled_; }
+    bool musicEnabled() const { return musicEnabled_; }
     bool ready() const {return master_!=nullptr;}
     unsigned submitted() const {return submitted_;}
     unsigned activeVoices() const;
     bool musicPlaying() const;
+    unsigned long long narrationSamplesPlayed() const;
 private:
     std::function<void(std::string_view)> reporter_;
     std::set<std::string> reportedMissing_;
     void report(std::string message) const {if (reporter_) reporter_(message);}
     struct Clip {WAVEFORMATEX format{}; std::vector<BYTE> data;};
-    struct Voice {IXAudio2SourceVoice* source{}; bool narration{}; unsigned serial{};};
+    struct Voice {IXAudio2SourceVoice* source{}; bool narration{}; unsigned serial{}; float volume{};};
     std::filesystem::path directory_;
     std::map<std::filesystem::path,Clip> clips_;
     std::map<std::string,std::pair<std::filesystem::path,float>> sounds_;
@@ -41,6 +47,8 @@ private:
     IXAudio2MasteringVoice* master_{};
     IXAudio2SourceVoice* music_{};
     bool ownsCom_{};
+    bool soundEnabled_{true},musicEnabled_{true},paused_{};
+    float musicVolume_{1};
     unsigned submitted_{};
     Clip& load(const std::filesystem::path&);
     void play(Clip&,float volume,float pan,bool narration);

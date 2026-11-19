@@ -63,6 +63,17 @@ int main(int argc,char** argv) {
         if (muted>.001) throw std::runtime_error("Mute left the effects audible");
         std::cout<<"Submitted "<<audio.submitted()<<", active voices "<<audio.activeVoices()
                  <<", process peak "<<peak<<", muted peak "<<muted<<'\n';
+        audio.setPaused(true);Sleep(60);
+        const auto pausedPosition=audio.narrationSamplesPlayed();Sleep(200);
+        if (audio.narrationSamplesPlayed()!=pausedPosition) throw std::runtime_error("Narration advanced during pause");
+        audio.setPaused(false);Sleep(120);
+        if (audio.narrationSamplesPlayed()<=pausedPosition) throw std::runtime_error("Narration did not resume");
+        audio.setMuted(false);audio.setSoundEnabled(false);audio.setMusicEnabled(false);Sleep(150);
+        if (ownPeak()>.001) throw std::runtime_error("Independent sound/music switches left audible output");
+        audio.setMusicEnabled(true);Sleep(180);
+        if (ownPeak()<=.001) throw std::runtime_error("Music switch did not restore output");
+        audio.setSoundEnabled(true);audio.setMuted(true);
+        std::cout<<"Narration pause/resume and independent sound/music switches passed\n";
         std::ifstream manifest(root/"audio/sounds.tsv");
         std::string name,file; float gain; unsigned decoded=0;
         while (manifest>>name>>file>>gain) {

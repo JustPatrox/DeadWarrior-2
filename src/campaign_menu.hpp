@@ -88,6 +88,7 @@ public:
     std::vector<Action> takeActions();
     Page page() const { return page_; }
     bool music() const { return music_; }
+    void setMusic(bool enabled) { music_=enabled; }
     Difficulty difficulty() const { return difficulty_; }
 private:
     const MenuAssets& assets_;

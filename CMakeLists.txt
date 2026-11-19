@@ -6,7 +6,7 @@ add_library(campaign_core STATIC ${CAMPAIGN_SOURCES})
 target_compile_features(campaign_core PUBLIC cxx_std_20)
 target_compile_options(campaign_core PRIVATE /W4 /permissive- /utf-8)
 set_target_properties(campaign_core PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-add_executable(DeadWarrior2 WIN32 src/windows.cpp src/windows_log.cpp src/windows_audio.cpp src/windows_display.cpp src/windows_render.cpp src/windows_save.cpp
+add_executable(DeadWarrior2 WIN32 src/windows.cpp src/windows_log.cpp src/windows_audio.cpp src/windows_display.cpp src/windows_render.cpp src/windows_save.cpp src/pause_menu.cpp
     src/resources/windows.rc)
 target_compile_features(DeadWarrior2 PRIVATE cxx_std_20)
 target_compile_definitions(DeadWarrior2 PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)

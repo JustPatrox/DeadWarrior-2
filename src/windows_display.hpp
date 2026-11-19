@@ -12,6 +12,11 @@ public:
     int frameLimit() const;
     bool vsync() const { return vsync_; }
     bool showFps() const { return showFps_; }
+    std::pair<int,int> renderSize(int width,int height) const;
+    std::string resolutionLabel() const;
+    bool loadOptions(const std::filesystem::path&);
+    bool saveOptions(const std::filesystem::path&);
+    void restore(HWND);
     void setOpen(bool open);
     void setMode(HWND, Mode);
     void key(HWND, WPARAM);
@@ -20,9 +25,15 @@ public:
     void resize(HWND, WPARAM edge, RECT& outer) const;
 private:
     void apply(HWND,int choice);
+    void applyResolution(HWND,int choice);
+    void fitWindow(HWND);
+    std::string optionsText() const;
     Mode mode_{Mode::Windowed};
+    Mode startupMode_{Mode::Windowed};
+    std::string savedOptions_;
     bool open_{},vsync_{},showFps_{};
     int rateChoice_{1};
+    int resolutionChoice_{}, resolutionFocus_{};
     int focused_{}, pressed_{-1};
     LONG_PTR windowStyle_{WS_OVERLAPPEDWINDOW};
     WINDOWPLACEMENT windowed_{sizeof(WINDOWPLACEMENT)};

@@ -75,7 +75,8 @@ void WindowsAudio::play(Clip& clip,float volume,float pan,bool narration) {
     if (FAILED(result)) {report("AUDIO ERROR CreateSourceVoice HRESULT="+std::to_string(result)); return;}
     XAUDIO2_BUFFER buffer{};
     buffer.Flags=XAUDIO2_END_OF_STREAM; buffer.AudioBytes=UINT32(clip.data.size()); buffer.pAudioData=clip.data.data();
-    free->source->SetVolume(volume);
+    free->volume=volume;
+    free->source->SetVolume(soundEnabled_ ? volume : 0.f);
     pan=std::clamp(pan,-1.f,1.f);
     const float left=1-std::max(0.f,pan),right=1+std::min(0.f,pan);
     const float mono[]{left,right},stereo[]{left,0,0,right};
@@ -112,7 +113,8 @@ void WindowsAudio::music(const std::string& name,bool loop) {
     XAUDIO2_BUFFER buffer{};
     buffer.Flags=XAUDIO2_END_OF_STREAM; buffer.AudioBytes=UINT32(clip.data.size()); buffer.pAudioData=clip.data.data();
     buffer.LoopCount=loop ? XAUDIO2_LOOP_INFINITE : 0;
-    music_->SetVolume(.2f*sound->second.second);
+    musicVolume_=.2f*sound->second.second;
+    music_->SetVolume(musicEnabled_ ? musicVolume_ : 0.f);
     if (FAILED(music_->SubmitSourceBuffer(&buffer)) || FAILED(music_->Start())) {report("AUDIO ERROR music playback="+name); stopMusic(); return;}
     report("AUDIO music="+name+" loop="+std::to_string(loop)+" gain="+std::to_string(.2f*sound->second.second));
     ++submitted_;
@@ -129,6 +131,25 @@ void WindowsAudio::setMuted(bool muted) {
     if (master_) master_->SetVolume(muted ? 0.f : 1.f);
     report("AUDIO muted="+std::to_string(muted));
 }
+void WindowsAudio::setSoundEnabled(bool enabled) {
+    soundEnabled_=enabled;
+    for (auto& voice:voices_) if (voice.source) voice.source->SetVolume(enabled ? voice.volume : 0.f);
+    report("AUDIO sound="+std::to_string(enabled));
+}
+void WindowsAudio::setMusicEnabled(bool enabled) {
+    musicEnabled_=enabled;
+    if (music_) music_->SetVolume(enabled ? musicVolume_ : 0.f);
+    report("AUDIO music_enabled="+std::to_string(enabled));
+}
+void WindowsAudio::setPaused(bool paused) {
+    if (paused_==paused) return;
+    paused_=paused;
+    for (auto& voice:voices_) if (voice.source) {
+        if (paused) voice.source->Stop();
+        else voice.source->Start();
+    }
+    report("AUDIO gameplay_paused="+std::to_string(paused));
+}
 unsigned WindowsAudio::activeVoices() const {
     unsigned active=0;
     if (music_) {
@@ -140,6 +161,14 @@ unsigned WindowsAudio::activeVoices() const {
         if (state.BuffersQueued) ++active;
     }
     return active;
+}
+unsigned long long WindowsAudio::narrationSamplesPlayed() const {
+    unsigned long long played=0;
+    for (const auto& voice:voices_) if (voice.source && voice.narration) {
+        XAUDIO2_VOICE_STATE state{};voice.source->GetState(&state);
+        played+=state.SamplesPlayed;
+    }
+    return played;
 }
 bool WindowsAudio::musicPlaying() const {
     if (!music_) return false;

@@ -186,6 +186,11 @@ struct HardwareRenderer::Device {
 HardwareRenderer::HardwareRenderer(const sw2::MenuAssets& assets):device_(std::make_unique<Device>(assets)) {}
 HardwareRenderer::~HardwareRenderer()=default;
 bool HardwareRenderer::synchronized() const { return device_->target && device_->synchronized; }
+SIZE HardwareRenderer::pixelSize() const {
+    if (!device_->target) return {};
+    const auto size=device_->target->GetPixelSize();
+    return {LONG(size.width),LONG(size.height)};
+}
 
 bool HardwareRenderer::draw(HWND hwnd,int w,int h,const std::vector<Draw>& draws,bool diagnostic,bool vsync) {
     auto& d=*device_;

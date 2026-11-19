@@ -13,7 +13,7 @@ From PowerShell at the project root, with Visual Studio 2022 or 2026, the deskto
 
 The output directory is `out/windows-x64/`. The executable loads prepared textures and audio from its adjacent `assets/` directory and runs the controllers in C++. MSVC's runtime is linked statically.
 
-The helmet icon comes from `icon.png`; `src/resources/deadwarrior2.ico` contains ten icon sizes. The three-second startup notice precedes the menu and its music. The supplied Max Games logo in `assets/branding/max-games.png` has a transparent background, white controller buttons, and a thin white outline.
+The helmet icon comes from `icon.png`; `src/resources/deadwarrior2.ico` contains ten icon sizes. The three-second startup notice reads **This project is not affiliated with** and precedes the menu and its music. The supplied Max Games logo in `assets/branding/max-games.png` has a transparent background, white controller buttons, and a thin white outline.
 
 ## Display settings and timing
 
@@ -34,6 +34,38 @@ work/venv/Scripts/python.exe tools/check_fps_counter.py
 Recorded results on an Intel i5-7400 and RTX 3050 at 1920 × 1080 were 60.07 FPS with Direct2D and 1.88 FPS with GDI+ during the tutorial. One of 853 accelerated frames exceeded 25 ms between presentations. These are measurements from that machine, not performance guarantees.
 
 The frame-limit checks recorded simulation rates between 29.82 and 30.20 steps per second with Direct2D, and 30.01 with GDI+ while rendering fell to 1.84 FPS. The FPS-counter test measured 60.03 / 30.01 FPS at 720p and 60.00 / 29.98 at 1080p. Actual presentation rate also depends on the monitor, scene, and V-Sync. Reports live in `work/windows-display/` and `evidence/windows-fps-counter/`.
+
+### Resolution and saved preferences
+
+Resolution offers **Auto**, **1280 × 720**, **1600 × 900**, **1920 × 1080**, **2560 × 1440**, and **3840 × 2160**. Use the arrows beside the value, or focus the row with Home followed by Up, choose with Left/Right, and press Enter. Auto follows the client size.
+
+The setting controls the game's render buffer in every display mode. Windowed mode also fits the window to the requested size within the monitor's work area. Fullscreen and borderless presentation retain the desktop mode and scale the chosen render resolution. Letterbox proportions and mouse coordinates remain based on the physical client area. Direct2D and the software fallback both support this behavior.
+
+All Insert options are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`: display mode, render resolution, frame limit, V-Sync, and Show FPS. Writes use a temporary file and atomic replacement. Invalid values fall back to supported defaults. `--save-dir` redirects both campaign saves and preferences for tests. Restarting with a deleted campaign save preserves the options file.
+
+```ini
+[Display]
+mode=windowed
+resolution=auto
+fps_limit=60
+vsync=0
+show_fps=0
+```
+
+`fps_limit=0` means Unlimited. The options file and temporary files stay outside source control and release packages.
+
+### Campaign pause menu
+
+The HUD's **MENU** button, **Esc**, and **P** open the original campaign pause panel. It offers Back to Game, a local How to Play guide, Restart Level, Quit to Menu, and independent Sound/Music toggles. Restart and quit use a confirmation panel. The original shield belongs to this pause menu; PC settings use a separate dark panel with gold beveled borders.
+
+Both pause and in-battle Insert settings stop simulation ticks. Narration and gameplay sound voices stop at their current sample positions and resume without skipping ahead; background music follows its own toggle. Closing Insert over an open pause menu returns to the pause menu. Input is blocked from reaching the battle while either panel is open. Resuming rebases the simulation deadline rather than replaying paused time.
+
+```powershell
+work/venv/Scripts/python.exe tools/check_resolution_pause.py
+work/venv/Scripts/python.exe tools/check_options.py
+```
+
+These native-window tests cover the actual render-target dimensions, window fitting, fullscreen/borderless modes, letterboxing, mouse/keyboard selection, pause timing, restart/quit actions, independent audio controls, process relaunch, invalid options, and preservation of preferences after deleting `campaign.sav`. Local results are written to `evidence/windows-pause-settings/` and `evidence/windows-options/`.
 
 ## Resource preparation
 
@@ -140,7 +172,7 @@ Each launch overwrites a single **`lastest.log`** next to the executable, with `
 
 Unsupported controls display **This button does not work yet, please report it with the log**. Entering an unfinished mission displays:
 
-> Thanks for playing! But this part its still work in progress. Stay updated for an update!
+> Thanks for playing! But this part is still a work in progress. Stay tuned for an update!
 
 The screen reuses menu background 976 and button states from 1002. **Restart keeping saves** preserves campaign progress; **Restart and delete save** deletes only `campaign.sav`; **Quit** closes the game. Saved progress pointing to an unfinished territory opens this screen rather than attempting to load missing resources. Insert settings block clicks on controls behind them. Tab/arrow navigation and Enter/Space are supported.
 

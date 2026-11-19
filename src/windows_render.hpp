@@ -13,6 +13,7 @@ public:
     ~HardwareRenderer();
     bool draw(HWND, int width, int height, const std::vector<sw2::Draw>&, bool diagnostic, bool vsync);
     bool synchronized() const;
+    SIZE pixelSize() const;
 private:
     struct Device;
     std::unique_ptr<Device> device_;

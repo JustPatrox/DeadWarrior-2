@@ -13,6 +13,7 @@
 #include "windows_audio.hpp"
 #include "windows_log.hpp"
 #include "work_in_progress.hpp"
+#include "pause_menu.hpp"
 #include "resources/ids.h"
 
 #include <algorithm>
@@ -164,6 +165,8 @@ class Window {
     CampaignProgress progress_;
     MenuAssets& assets_;
     CampaignMenu menu_;
+    PauseMenu pause_{assets_};
+    bool pauseButtonDown_{};
     WindowsAudio soundPlayer_;
     std::unique_ptr<CampaignTutorial> tutorial_;
     std::unique_ptr<CampaignIntermission> intermission_;
@@ -189,6 +192,44 @@ class Window {
     std::deque<Clock::time_point> presentedFrames_;
     double measuredFps_{};
     Point mouse_{-1,-1};
+    void saveOptions() {
+        if (!display_.saveOptions(saveDirectory_/L"options.ini"))
+            logEvent("ERROR could not save options.ini win32="+std::to_string(GetLastError()));
+    }
+    void loadPauseArt() {
+        if (!assets_.art.contains({9951,1})) assets_.loadTextures(directory_.parent_path()/"pause");
+    }
+    void showPause(bool open) {
+        if (open) loadPauseArt();
+        pause_.setOpen(open); pauseButtonDown_=false;
+        mouse_={-1,-1};
+        if (GetCapture()==hwnd_) ReleaseCapture();
+        if (tutorial_) {tutorial_->release({}); tutorial_->point({});}
+        SetCursor(LoadCursorW(nullptr,IDC_ARROW));
+        soundPlayer_.setPaused(tutorial_ && (open || display_.isOpen()));
+        gameDeadline_=Clock::now()+gameInterval;
+        logEvent(std::string("PAUSE open=")+(open ? "1" : "0"));
+    }
+    void pauseAction(PauseMenu::Action action) {
+        using A=PauseMenu::Action;
+        if (action==A::None) return;
+        soundPlayer_.effect("clickButton",0,false);
+        if (action==A::Resume) showPause(false);
+        else if (action==A::Restart) {showPause(false); startMission();}
+        else if (action==A::MainMenu) {
+            showPause(false); soundPlayer_.stopNarration();
+            tutorial_.reset(); intermission_.reset(); unfinished_.reset();
+            saved_=loadProgress(saveDirectory_); progress_=CampaignProgress{};
+            menu_.restart(saved_.has_value()); soundPlayer_.music("loginMusic");
+            logEvent("SCENE main-menu from-pause");
+        } else if (action==A::Sound || action==A::Music) {
+            bool sound=menu_.music() && soundPlayer_.soundEnabled();
+            bool music=menu_.music() && soundPlayer_.musicEnabled();
+            if (action==A::Sound) sound=!sound; else music=!music;
+            soundPlayer_.setSoundEnabled(sound); soundPlayer_.setMusicEnabled(music);
+            menu_.setMusic(sound || music); soundPlayer_.setMuted(!menu_.music());
+        }
+    }
     void banner(std::string message) {
         banner_=std::move(message); bannerEnd_=Clock::now()+std::chrono::seconds(6);
     }
@@ -227,6 +268,7 @@ class Window {
         InvalidateRect(hwnd_,nullptr,FALSE);
     }
     void startMission() {
+        pause_.setOpen(false); soundPlayer_.setPaused(false);
         if (progress_.level>5) {
             showUnfinished();
             return;
@@ -311,6 +353,8 @@ class Window {
                 soundPlayer_.effect("clickButton",0,false);
                 break;
             case Action::MusicToggle:
+                soundPlayer_.setSoundEnabled(menu_.music());
+                soundPlayer_.setMusicEnabled(menu_.music());
                 soundPlayer_.setMuted(!menu_.music());
                 break;
             case Action::Online: url=L"http://www.stickempires.com"; break;
@@ -341,6 +385,10 @@ class Window {
             logEvent("SCENE main-menu");
             gameDeadline_=now+gameInterval;
             soundPlayer_.music("loginMusic");
+        }
+        if (tutorial_ && (pause_.isOpen() || display_.isOpen())) {
+            gameDeadline_=now+gameInterval;
+            return;
         }
         // Leave any remaining ticks due for the next pass so a slow paint
         // cannot discard simulation time or prevent input from being pumped.
@@ -418,7 +466,7 @@ class Window {
         format.SetLineAlignment(gd::StringAlignmentCenter);
         gd::SolidBrush ink(gd::Color(255,242,242,242));
         g.SetTextRenderingHint(gd::TextRenderingHintAntiAliasGridFit);
-        g.DrawString(L"This game is not affiliated with",-1,&font,
+        g.DrawString(L"This project is not affiliated with",-1,&font,
                      gd::RectF(0,top,float(w),lineHeight),&format,&ink);
         g.SetInterpolationMode(gd::InterpolationModeHighQualityBicubic);
         g.DrawImage(&studioLogo_,gd::RectF(cx-logoWidth/2,top+lineHeight+gap,logoWidth,logoHeight));
@@ -429,6 +477,11 @@ class Window {
             if (unfinished_) draws=unfinished_->drawList();
             else if (intermission_) draws=intermission_->drawList();
             else draws=tutorial_ ? tutorial_->drawList() : menu_.drawList();
+        }
+        if (pause_.isOpen() && !display_.isOpen()) {
+            auto overlay=pause_.drawList(menu_.music() && soundPlayer_.soundEnabled(),
+                                         menu_.music() && soundPlayer_.musicEnabled());
+            draws.insert(draws.end(),overlay.begin(),overlay.end());
         }
         display_.append(draws);
         if (!banner_.empty() && Clock::now()<bannerEnd_) {
@@ -452,8 +505,10 @@ class Window {
         }
     }
     void softwareDraw(HDC dc,int w,int h,const std::vector<Draw>& draws) {
-        composeSoftware(w,h,draws);
+        const auto [rw,rh]=display_.renderSize(w,h);
+        composeSoftware(rw,rh,draws);
         gd::Graphics screen(dc);
+        screen.SetInterpolationMode(gd::InterpolationModeHighQualityBilinear);
         screen.DrawImage(buffer_.get(),0,0,w,h);
     }
     void drawClient(HDC dc,bool present) {
@@ -462,8 +517,9 @@ class Window {
         if (r.right<=0 || r.bottom<=0 || (present && IsIconic(hwnd_))) return;
         const auto start=Clock::now();
         const auto draws=scene();
+        const auto [rw,rh]=display_.renderSize(r.right,r.bottom);
         const bool accelerated=present && !showingNotice_ && !forceSoftware_ &&
-            hardware_.draw(hwnd_,r.right,r.bottom,draws,diagnostic_,display_.vsync());
+            hardware_.draw(hwnd_,rw,rh,draws,diagnostic_,display_.vsync());
         if (present && loggedRenderer_!=int(accelerated)) {
             loggedRenderer_=int(accelerated);
             logEvent(std::string("RENDER backend=")+(accelerated ? "Direct2D" : "GDI+")+
@@ -481,7 +537,7 @@ class Window {
             const auto ms=[](Clock::duration d){ return std::chrono::duration<double,std::milli>(d).count(); };
             const double interval=lastPaint_==Clock::time_point{} ? 0. : ms(end-lastPaint_);
             if (frameTiming_.is_open()) frameTiming_<<interval<<'\t'<<ms(end-start)<<'\t'<<accelerated<<'\t'
-                        <<(showingNotice_ ? "notice" : tutorial_ ? "battle" : intermission_ ? "map" : "menu")
+                        <<(showingNotice_ ? "notice" : tutorial_ && (pause_.isOpen() || display_.isOpen()) ? "paused" : tutorial_ ? "battle" : intermission_ ? "map" : "menu")
                         <<'\t'<<display_.frameLimit()<<'\t'<<(tutorial_ ? tutorial_->ticks() : -1)
                         <<'\t'<<(accelerated && hardware_.synchronized())<<'\n';
             lastPaint_=end;
@@ -496,6 +552,8 @@ class Window {
         if (tutorial_) tutorial_->release({});
         if (intermission_) {intermission_->point({}); intermission_->release();}
         display_.setOpen(open);
+        soundPlayer_.setPaused(tutorial_ && (open || pause_.isOpen()));
+        if (tutorial_) gameDeadline_=Clock::now()+gameInterval;
         if (showingNotice_) InvalidateRect(hwnd_,nullptr,FALSE);
     }
     void paint() {
@@ -508,6 +566,7 @@ class Window {
         using Mode=DisplaySettings::Mode;
         display_.setMode(hwnd_,display_.mode()==Mode::Fullscreen ? Mode::Windowed : Mode::Fullscreen);
         logEvent("DISPLAY mode="+std::to_string(int(display_.mode())));
+        saveOptions();
         InvalidateRect(hwnd_,nullptr,FALSE);
     }
     void refreshPointer() {
@@ -516,19 +575,20 @@ class Window {
         ScreenToClient(hwnd_,&position);
         RECT client{}; GetClientRect(hwnd_,&client);
         if (!PtInRect(&client,position)) return;
-        const bool custom=tutorial_ && !display_.isOpen() && tutorial_->cursorSymbol();
+        const bool custom=tutorial_ && !display_.isOpen() && !pause_.isOpen() && tutorial_->cursorSymbol();
         SetCursor(custom ? nullptr : LoadCursorW(nullptr,IDC_ARROW));
     }
     LRESULT message(UINT msg,WPARAM w,LPARAM l) {
         switch (msg) {
         case WM_ERASEBKGND: return 1;
         case WM_SETCURSOR:
-            if (LOWORD(l)==HTCLIENT && tutorial_ && !display_.isOpen()) {
+            if (LOWORD(l)==HTCLIENT && tutorial_ && !display_.isOpen() && !pause_.isOpen()) {
                 SetCursor(tutorial_->cursorSymbol() ? nullptr : LoadCursorW(nullptr,IDC_ARROW));
                 return TRUE;
             }
             break;
         case WM_KILLFOCUS: case WM_CANCELMODE:
+            pauseButtonDown_=false; pause_.cancelPress();
             mouse_={-1,-1};
             if (tutorial_) {tutorial_->release({}); tutorial_->point({});}
             if (GetCapture()==hwnd_) ReleaseCapture();
@@ -539,8 +599,16 @@ class Window {
             if (capturePath_.empty()) return 0;
             RECT r{}; GetClientRect(hwnd_,&r);
             if (r.right>0 && r.bottom>0) {
-                composeSoftware(r.right,r.bottom,scene());
-                savePng(*buffer_,capturePath_);
+                const auto [rw,rh]=display_.renderSize(r.right,r.bottom);
+                composeSoftware(rw,rh,scene());
+                if (rw==r.right && rh==r.bottom) savePng(*buffer_,capturePath_);
+                else {
+                    gd::Bitmap scaled(r.right,r.bottom,PixelFormat32bppPARGB);
+                    { gd::Graphics graphics(&scaled);
+                      graphics.SetInterpolationMode(gd::InterpolationModeHighQualityBilinear);
+                      graphics.DrawImage(buffer_.get(),0,0,r.right,r.bottom); }
+                    savePng(scaled,capturePath_);
+                }
             }
             return 0;
         }
@@ -554,6 +622,19 @@ class Window {
             if (capturePath_.empty()) return -1;
             if (frameTiming_.is_open()) frameTiming_.flush();
             return !display_.showFps() ? -1 : LRESULT(std::lround(measuredFps_*100));
+        case WM_APP+20: {
+            if (capturePath_.empty()) return 0;
+            const auto size=hardware_.pixelSize();
+            const unsigned width=loggedRenderer_==1 ? unsigned(size.cx) : buffer_ ? buffer_->GetWidth() : 0;
+            const unsigned height=loggedRenderer_==1 ? unsigned(size.cy) : buffer_ ? buffer_->GetHeight() : 0;
+            return LRESULT((width<<16)|height);
+        }
+        case WM_APP+21:
+            return capturePath_.empty() ? 0 : int(pause_.isOpen()) | (int(display_.isOpen())<<1) |
+                (int(menu_.music() && soundPlayer_.soundEnabled())<<2) |
+                (int(menu_.music() && soundPlayer_.musicEnabled())<<3);
+        case WM_APP+22:
+            return capturePath_.empty() || !tutorial_ ? -1 : tutorial_->ticks();
         case WM_SIZE: InvalidateRect(hwnd_,nullptr,FALSE); return 0;
         case WM_POWERBROADCAST:
             if (w==PBT_APMRESUMEAUTOMATIC && !showingNotice_) gameDeadline_=Clock::now()+gameInterval;
@@ -562,6 +643,7 @@ class Window {
             display_.resize(hwnd_,w,*reinterpret_cast<RECT*>(l));
             return TRUE;
         case WM_CAPTURECHANGED:
+            if (l) {pauseButtonDown_=false;pause_.cancelPress();}
             if (display_.isOpen()) display_.pointer(hwnd_,msg,{});
             else if (l && tutorial_) tutorial_->release({});
             return 0;
@@ -577,8 +659,16 @@ class Window {
                 display_.pointer(hwnd_,msg,Viewport(r.right,r.bottom).toStage(mouse_));
                 if (msg==WM_LBUTTONUP) logEvent("DISPLAY mode="+std::to_string(int(display_.mode()))+
                     " fps="+std::to_string(display_.frameLimit())+" vsync="+std::to_string(display_.vsync())+
-                    " fps_counter="+std::to_string(display_.showFps()));
+                    " fps_counter="+std::to_string(display_.showFps())+" resolution="+display_.resolutionLabel());
+                if (msg==WM_LBUTTONUP) saveOptions();
                 if (showingNotice_ && msg!=WM_MOUSEMOVE) InvalidateRect(hwnd_,nullptr,FALSE);
+                return 0;
+            }
+            if (pause_.isOpen()) {
+                RECT r{}; GetClientRect(hwnd_,&r);
+                pause_.point(Viewport(r.right,r.bottom).toStage(mouse_));
+                if (msg==WM_LBUTTONDOWN) {SetCapture(hwnd_);pause_.press();}
+                if (msg==WM_LBUTTONUP) {const auto action=pause_.release();ReleaseCapture();pauseAction(action);}
                 return 0;
             }
             if (unfinished_) {
@@ -607,6 +697,15 @@ class Window {
             if (tutorial_) {
                 RECT r{}; GetClientRect(hwnd_,&r);
                 auto stage=Viewport(r.right,r.bottom).toStage(mouse_);
+                const Rect pauseButton{482,674,50,22};
+                if (!tutorial_->ended() && msg==WM_LBUTTONDOWN && stage && pauseButton.contains(*stage)) {
+                    pauseButtonDown_=true; SetCapture(hwnd_); return 0;
+                }
+                if (msg==WM_LBUTTONUP && pauseButtonDown_) {
+                    pauseButtonDown_=false; ReleaseCapture();
+                    if (stage && pauseButton.contains(*stage)) showPause(true);
+                    return 0;
+                }
                 tutorial_->point(stage);
                 refreshPointer();
                 if (InSendMessageEx(nullptr)==ISMEX_NOSEND)
@@ -635,6 +734,7 @@ class Window {
             if (tutorial_) tutorial_->point({});
             if (intermission_) intermission_->point({});
             if (unfinished_) unfinished_->point({});
+            if (pause_.isOpen()) pause_.point({});
             return 0;
         case WM_KEYDOWN: {
             using Mode=DisplaySettings::Mode;
@@ -642,6 +742,11 @@ class Window {
             if (w==VK_INSERT && !repeated) showDisplay(!display_.isOpen());
             else if (w==VK_ESCAPE && display_.isOpen() && !repeated) showDisplay(false);
             else if (w==VK_F11 && !repeated) toggleFullscreen();
+            else if (pause_.isOpen() && !display_.isOpen() && !repeated) {
+                if (w=='P') showPause(false);
+                else pauseAction(pause_.key(int(w)));
+            }
+            else if (tutorial_ && !tutorial_->ended() && !display_.isOpen() && !repeated && (w=='P' || w==VK_ESCAPE)) showPause(true);
             else if (unfinished_ && !display_.isOpen() && !repeated) {
                 if (w==VK_TAB || w==VK_RIGHT || w==VK_DOWN) unfinished_->focus(1);
                 else if (w==VK_LEFT || w==VK_UP) unfinished_->focus(-1);
@@ -654,14 +759,15 @@ class Window {
                 tutorial_->unitAbility(w=='Q' ? 0 : w=='W' ? 1 : 2);
             } else if (display_.isOpen() && (!repeated || (w!=VK_RETURN && w!=VK_SPACE))) {
                 display_.key(hwnd_,w);
+                saveOptions();
                 logEvent("DISPLAY mode="+std::to_string(int(display_.mode()))+
                     " fps="+std::to_string(display_.frameLimit())+" vsync="+std::to_string(display_.vsync())+
-                    " fps_counter="+std::to_string(display_.showFps()));
+                    " fps_counter="+std::to_string(display_.showFps())+" resolution="+display_.resolutionLabel());
                 if (showingNotice_) InvalidateRect(hwnd_,nullptr,FALSE);
             }
             return 0;
         }
-        case WM_DESTROY: logEvent("SHUTDOWN window closed"); PostQuitMessage(0); return 0;
+        case WM_DESTROY: saveOptions(); logEvent("SHUTDOWN window closed"); PostQuitMessage(0); return 0;
         }
         return DefWindowProcW(hwnd_,msg,w,l);
     }
@@ -758,6 +864,10 @@ public:
         if (!CreateWindowW(wc.lpszClassName,L"DeadWarrior 2",WS_OVERLAPPEDWINDOW,
                 CW_USEDEFAULT,CW_USEDEFAULT,size.right-size.left,size.bottom-size.top,nullptr,nullptr,instance,this))
             throw std::runtime_error("Cannot create the game window");
+        const bool loaded=display_.loadOptions(saveDirectory_/L"options.ini");
+        logEvent(std::string("OPTIONS load=")+(loaded ? "ok" : "defaults-or-partial")+" file="+(saveDirectory_/L"options.ini").string());
+        display_.restore(hwnd_);
+        saveOptions();
         ShowWindow(hwnd_,capturePath_.empty() ? SW_SHOW : SW_SHOWNOACTIVATE);
         UpdateWindow(hwnd_);
         noticeEnd_=Clock::now()+noticeDuration;
