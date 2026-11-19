@@ -43,7 +43,7 @@ jobs:
         include:
           - runner: ubuntu-22.04
             package: Linux-x64
-          - runner: macos-15
+          - runner: macos-26
             package: macOS-arm64
           - runner: macos-15-intel
             package: macOS-x64
