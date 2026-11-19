@@ -33,14 +33,14 @@ This project is not affiliated with Max Games or the original game's creators. S
 
 ## Current status
 
-**Development build: the full campaign has not been ported yet.** Seven missions are accessible, through Explosive War. Unimplemented sections display a work-in-progress screen with restart and quit options.
+**Development build: the full campaign has not been ported yet.** Eight missions are accessible, through The Night is Dark (Juggerknights). Unimplemented sections display a work-in-progress screen with restart and quit options.
 
 | Feature | Status |
 | --- | --- |
-| Menus, tutorial, and first seven missions | Implemented; full parity is still under review |
+| Menus, tutorial, and first eight missions | Implemented; full parity is still under review |
 | Campaign progress, upgrades, and saves | Implemented for the current content |
 | 16:9 rendering, audio, and contextual cursors | Implemented |
-| Windowed, borderless window, and fullscreen modes | Available in the Insert menu |
+| Windowed, borderless window, and fullscreen modes | Insert on Windows/Linux; Option on macOS |
 | 30 / 60 / 120 / 240 FPS or unlimited | Available |
 | V-Sync, FPS counter, and render resolution | Available |
 | Original campaign pause menu | MENU, Esc, or P |
@@ -52,7 +52,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 ## Download and play
 
-**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.3)**
+**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.4)**
 
 | Platform | Release asset | Start |
 | --- | --- | --- |
@@ -63,7 +63,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 All packages include assets. Keep Linux/Windows assets beside the executable; macOS keeps them inside the app. macOS builds have an ad-hoc integrity signature, without Developer ID notarization. Linux builds target Ubuntu 22.04 or newer compatible distributions (glibc 2.35+), with desktop graphics and audio libraries.
 
-This is an unfinished campaign preview with seven missions; it is not the complete game. All four native packages use the same campaign sources and prepared content. Automated checks are supplemented by ongoing gameplay validation.
+This is an unfinished campaign preview with eight missions; it is not the complete game. All four native packages use the same campaign sources and prepared content. Automated checks are supplemented by ongoing gameplay validation.
 
 ## Build from source
 

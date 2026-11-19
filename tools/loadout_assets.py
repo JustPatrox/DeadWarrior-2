@@ -4,13 +4,15 @@ import re
 
 ROOT=Path(__file__).resolve().parents[1]
 CLASSES=("Miner","Swordwrath","Spearton","Archer","Ninja","Magikill","Monk","Giant",
-         "EnslavedGiant","Dead","Medusa","MinerChaos","Bomber")
+         "EnslavedGiant","Dead","Medusa","MinerChaos","Bomber","Knight")
 
 def freeze_default_loadouts(c,overrides=None):
     properties=set()
     for name in CLASSES:
         source=ROOT/"work/extract/scripts/com/brockw/stickwar/engine/units"/(name+".as")
         for receiver,argument in re.findall(r'([\w.]+)\.gotoAndStop\((weapon|armor|misc)\)',source.read_text(encoding="utf-8")):
+            properties.add(receiver.split(".")[-1])
+        for receiver in re.findall(r'([\w.]+)\.gotoAndStop\(team\.loadout\.getItem\(',source.read_text(encoding="utf-8")):
             properties.add(receiver.split(".")[-1])
     items={}
     for events in c.index["timelines"].values():

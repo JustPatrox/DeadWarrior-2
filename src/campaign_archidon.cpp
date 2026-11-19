@@ -20,7 +20,7 @@ void CampaignTutorial::configureCampaign(const std::filesystem::path& dir,const 
     mission_=progress.level; upgrades_=progress.upgrades;
     backgroundLayers_={4119,4117,4114,4124};
     enemyStatueFrame_=6;
-    const auto levelDir=mission_==6 ? dir.parent_path()/"bomber" : mission_==5 ? dir.parent_path()/"giants" : mission_==4 ? dir.parent_path()/"rebels" : mission_==3 ? dir.parent_path()/"magic" :
+    const auto levelDir=mission_==7 ? dir.parent_path()/"knight" : mission_==6 ? dir.parent_path()/"bomber" : mission_==5 ? dir.parent_path()/"giants" : mission_==4 ? dir.parent_path()/"rebels" : mission_==3 ? dir.parent_path()/"magic" :
         mission_==2 ? dir.parent_path()/"shadow" : dir;
     std::ifstream starting(levelDir/"starting.tsv");
     std::string key;
@@ -48,8 +48,21 @@ void CampaignTutorial::configureCampaign(const std::filesystem::path& dir,const 
                 backgroundLayers_={4094,4080,4087,4091,4084}; ownStatueFrame_=8; enemyStatueFrame_=11;
                 chaosOpponent_=true;
             }
-            if (mission_==6) {
-                readRules(levelDir);backgroundLayers_={4102,4098};
+            if (mission_>=6) {
+                readRules(dir.parent_path()/"bomber");backgroundLayers_={4102,4098};
+            }
+            if (mission_>=7) {
+                readRules(levelDir);backgroundLayers_={4094,4080,4087,4091,4084};
+                std::ifstream available(levelDir/"available.tsv");
+                std::vector<std::string> names;
+                while (available>>key) names.push_back(key);
+                if (!available.is_open() || !available.eof()) throw std::runtime_error("Invalid Chaos recruitment manifest");
+                for (const auto& entry:std::array<EnemyBuild,3>{{{giant,5,"Giant"},{knight,1,"Knight"},{bomber,1,"Bomber"}}})
+                    if (std::find(names.begin(),names.end(),entry.name)!=names.end()) enemyBuild_.push_back(entry);
+                std::ifstream knightTips(levelDir/"tips.tsv");
+                int body,frame;Point tip;
+                while (knightTips>>body>>frame>>tip.x>>tip.y) tips_[{body,frame}]=tip;
+                if (!knightTips.is_open() || !knightTips.eof()) throw std::runtime_error("Invalid Juggerknight hit markers");
             }
             enemyCastleArcher_=rules_.at("enemy.castleArchers")>0;
         }
@@ -74,7 +87,6 @@ void CampaignTutorial::configureCampaign(const std::filesystem::path& dir,const 
     for (int side=0;side<2;++side) {
         auto& s=statues_[side];
         s.position.x=side ? length_-legacyWidth-500 : legacyWidth+500;
-        s.width=art_.texture(1904,side ? enemyStatueFrame_ : ownStatueFrame_).bounds.w*.8/2;
         s.hp=s.maxHp=rules_.at(side ? "oponent.statueHealth" : "player.statueHealth");
         median_[side]=side ? length_-legacyWidth : legacyWidth;
     }
@@ -89,7 +101,7 @@ void CampaignTutorial::configureCampaign(const std::filesystem::path& dir,const 
         if (team!="player" && team!="oponent") throw std::runtime_error("Invalid starting team");
         const int type=name=="Miner" ? miner : name=="Swordwrath" ? sword : name=="Archidon" ? archer :
             name=="Monk" ? healer : name=="Ninja" ? ninja : name=="Magikill" ? wizard : name=="Spearton" ? spearton :
-            name=="ChaosMiner" ? chaosMiner : name=="Giant" ? giant : name=="Bomber" ? bomber : name=="EnslavedGiant" ? enslavedGiant : 0;
+            name=="ChaosMiner" ? chaosMiner : name=="Giant" ? giant : name=="Bomber" ? bomber : name=="EnslavedGiant" ? enslavedGiant : name=="Knight" ? knight : 0;
         if (!type) throw std::runtime_error("Unsupported starting unit");
         groups[team=="oponent"].push_back(type);
     }
@@ -211,7 +223,7 @@ void CampaignTutorial::updateArchidon() {
         if (towerControl_==100) enemyGold_+=int(rules_.at("hill.goldCollectionRate"));
     }
     if (mission_>=2) {
-        if (!hint_ && std::any_of(units_.begin(),units_.end(),[](const Unit& u){return !u.enemy && u.poison>0;}))
+        if (mission_==2 && !hint_ && std::any_of(units_.begin(),units_.end(),[](const Unit& u){return !u.enemy && u.poison>0;}))
             hint_=3;
         if (hint_) ++hintTicks_;
         return;

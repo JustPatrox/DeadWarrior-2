@@ -15,6 +15,7 @@ public:
     void release(std::optional<Point>);
     void command(Point);
     void unitAbility(int slot=0);
+    void selectArmy(bool center=false);
     std::vector<Draw> drawList() const;
     std::string takeVoice();
     struct SoundEvent {std::string name; Point position{}; bool spatial{true};};
@@ -42,6 +43,8 @@ public:
         int giants{},giantHits{},cinematic{-1},dialogue{-1};
         double giantHealth{};
         int bombers{},bomberWaves{},nextBomberWave{},explosions{},boulderShots{},boulderHits{},enslavedGiants{};
+        int enemyKnights{},selectedMilitary{};
+        int knightHint{-1};
     };
     BattleStatus battleStatus() const;
     bool showingResults() const;
@@ -124,7 +127,7 @@ private:
     std::array<double,2> median_{};
     static constexpr int ownStatue=-2,opposingStatue=-3,ownWall=-4;
     static constexpr int sword=4922,miner=3104,spearton=6456,archer=4236,ninja=7289,wizard=7926,healer=8233,
-        giant=7025,chaosMiner=7323,enslavedGiant=7526,medusa=8061,dead=8529,bomber=8774;
+        giant=7025,chaosMiner=7323,enslavedGiant=7526,medusa=8061,dead=8529,bomber=8774,knight=5724;
     static bool isWorker(int symbol) {return symbol==miner || symbol==chaosMiner;}
     int mission_{},ownStatueFrame_{1},enemyStatueFrame_{10},mobileShots_{},hint_{},hintTicks_{};
     bool chaosOpponent_{};
@@ -153,6 +156,11 @@ private:
     int enemyBowFrame_{1},enemyArcherFrame_{1},enemyCastleShots_{};
     double enemyBowAngle_{};
     bool enemyCastleArcher_{};
+    int enemyCastleResearchTicks_{-1};
+    struct EnemyBuild {int symbol{},building{};std::string name;};
+    std::vector<EnemyBuild> enemyBuild_;
+    bool knightHintTriggered_{};
+    int knightHintTicks_{-1};
     struct MagicEffect {int symbol{},frame{1}; Point start{},end{}; bool enemy{}; double depth{},damage{-1};};
     std::vector<MagicEffect> magic_;
     int magicHits_{},heals_{};
@@ -237,6 +245,7 @@ private:
     void throwBoulder(Unit&);
     void updateBoulders();
     void drawBoulders(std::vector<std::pair<double,Draw>>&) const;
+    void updateKnightController();
     void createMiningBlocks();
     void updateArchidon();
     Point updateArcher(Unit&);

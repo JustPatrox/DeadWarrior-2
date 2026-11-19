@@ -38,7 +38,9 @@ Point CampaignTutorial::updateEnslavedGiant(Unit& u) {
         const auto& target=combatTarget(u.target);
         const double dx=target.position.x-u.position.x,distance=std::abs(dx);
         const double speed=stat(u,"projectileVelocity"),gravity=rules_.at("gravity");
-        const double base=stat(u,"scale"),aimX=50*base,aimZ=-90*base+25;
+        // _mc carries the perspective scale; the Unit container does not.
+        // EnslavedGiant derives its aim offsets with localToGlobal/globalToLocal.
+        const double bodyScale=scale(u),aimX=50*bodyScale,aimZ=-90*bodyScale+25;
         const double x=distance-aimX;
         const double discriminant=std::pow(speed,4)-gravity*(gravity*x*x+2*aimZ*speed*speed);
         const double rangeDiscriminant=std::pow(speed,4)-gravity*(gravity*std::pow(distance+aimX,2)+2*aimZ*speed*speed);
@@ -71,7 +73,7 @@ void CampaignTutorial::throwBoulder(Unit& u) {
     if (u.target!=-1) {
         const auto& target=combatTarget(u.target);
         if (target.hp>0 && std::abs(target.position.x-u.position.x)<=stat(u,"maximumRange")) {
-            const double aimZ=-90*stat(u,"scale")+25;
+            const double aimZ=-90*scale(u)+25;
             const double time=(speed*std::sin(theta)+std::sqrt(std::max(0.,speed*speed*std::pow(std::sin(theta),2)-2*gravity*aimZ)))/gravity;
             shot.dy=(target.position.y-u.position.y)/(std::abs(time)<.001 ? 5 : time);
         }
@@ -93,9 +95,8 @@ void CampaignTutorial::updateBoulders() {
         if (shot.debris) shot.drawRotation=angle/radians;
         auto contains=[&](const Unit& unit,double x,double y,bool arrow=true) {
             const bool structure=unit.symbol==1904 || unit.symbol==1174;
-            const double perspective=structure ? 1 : rules_.at("backScale")+unit.position.y/depth_*(rules_.at("frontScale")-rules_.at("backScale"));
-            const double width=structure ? unit.width : stat(unit,"hitWidth")*perspective;
-            const double height=structure ? unit.height : stat(unit,"hitHeight")*perspective;
+            const double width=structure ? unit.width : stat(unit,"hitWidth");
+            const double height=structure ? unit.height : stat(unit,"hitHeight");
             return std::abs(x-unit.position.x)<width && y-unit.position.y>-height && y-unit.position.y<(arrow ? 0 : height);
         };
         auto contact=[&](const Unit& unit) {

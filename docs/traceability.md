@@ -46,7 +46,7 @@ This table maps the original AS3 classes and symbol IDs to the native implementa
 | `GrassHills`, XML level 5 | Layers 4058 / 4056 / 4062 / 4067, `assets/rebels/` | Ground extended from the last opaque row; original route to frame 298. Entry landscapes, victory, and saves checked at 720p/1080p. |
 | `CampaignCutScene1` | `src/campaign_giants.cpp` | Enemy statue 180, zero enemy gold, first Giant death, 61-frame fades, Medusa, five arriving rebels, seven voices, and final-voice victory. `giants_probe` and an Adobe prepared-death reference pass; natural original battle parity remains pending. |
 | `Giant`, `MinerChaos`, `CastleDeads` / `Dead` | `campaign_giants.cpp`, Desert and Chaos castle resources | Up to three frontal targets, stun, Chaos mining, elevated poisoned projectiles; hit/poison/deployment checks and native captures. |
-| `EnslavedGiant.setItem`, giantbag 1950 | Stopped Default appearance with original body transforms | All 319 idle/walk/death frames retain the bag instead of cycling Bones/Stone. The allied ranged attack is still pending. |
+| `EnslavedGiant.setItem`, giantbag 1950 | Stopped Default appearance with original body transforms | Idle, walk, death, and throwing frames retain the bag instead of cycling Bones/Stone. The ranged attack is translated in campaign_bomber.cpp. |
 
 ## Interaction, audio, and requested PC behavior
 
@@ -61,11 +61,11 @@ This table maps the original AS3 classes and symbol IDs to the native implementa
 | Requested unfinished-content screen and logging | `src/work_in_progress.cpp`, `src/windows_log.cpp`; menu 976 / button 1002 | Single `lastest.log`, restart with/without `campaign.sav`, Quit, saved unfinished territory, canceled click, and blocking behind Insert. |
 | Requested FPS switch | `src/windows_display.cpp`, `src/windows.cpp` | Default Off; completed-presentation counter in the viewport's top-left, mouse/keyboard toggling, 30/60 FPS, V-Sync, and letterboxing at 720p/1080p. |
 
-`ArtCompiler` applies `loadout_assets.py` only to the receivers of `gotoAndStop(weapon/armor/misc)` in the unit classes. Default is retained except for explicit appearances such as CastleDead's Wrapped Helmet and castle archers' Basic Helmet. Body/action animations remain active. `refresh_actor_loadouts.py` updates 4,726 frames across 61 poses while preserving registration and separate bow composition.
+`ArtCompiler` applies `loadout_assets.py` to equipment receivers of `gotoAndStop(weapon/armor/misc)` and direct `gotoAndStop(team.loadout.getItem(...))` calls in the unit classes. Default is retained except for explicit appearances such as CastleDead's Wrapped Helmet and castle archers' Basic Helmet. Body/action animations remain active. `refresh_actor_loadouts.py` updates 4,726 frames across 61 poses while preserving registration and separate bow composition.
 
 Music gain follows `0.2 * volumeMap(name)`. An isolated native menu session measured peak 0.222104 with `loginMusic` gain 0.672; the earlier combined music/voice/effect test did not isolate the music contribution.
 
-The complete campaign, natural combat parity, remaining cinematics, broader DPI coverage, and all interface states remain unfinished. The seventh territory currently opens the work-in-progress screen. No macOS or Linux implementation is claimed.
+The complete campaign, natural combat parity, remaining cinematics, broader DPI coverage, and all interface states remain unfinished. Untranslated territories open the work-in-progress screen. Native SDL frontends now run on Linux and both macOS architectures; see portable.md for the tested systems and remaining limits.
 
 ## Native pause and PC settings
 
@@ -80,6 +80,19 @@ Requested PC resolution and persistence are implemented in `windows_display.cpp`
 
 The allied Giant uses SiegeBuilding's separate production queue: 1,500 gold, seven population, and the original 1,200-frame training counter. The throw sound fires at attack frame 1 and the Boulder is released at frame 33. Projectiles retain perspective, ballistic/lateral velocity, three contact points, armor damage, stun/knockback, five harmless fragments, and delayed fragment cleanup. Bomber death detonates once, with radius 100 and damage 20 at explosion frame 3. Default equipment timelines remain stopped while the body animations play.
 
-Adobe readback of `Unit.firstInit` supplies collider measurements independent of cropped image bounds: Bomber 80.7 × 81.45; Enslaved Giant 184.5 × 264.1; Chaos Giant 299.95 × 288.35. Boulder contact tests use those source measurements and perspective. Statue projectile bounds are refreshed from each mission's actual statue skin. `GIANT_GROWTH_I/II` in CampaignBomber are Order flags; they do not grant the differently keyed Chaos Giant growth technologies.
+Adobe readback of `Unit.firstInit` supplies collider measurements independent of cropped image bounds: Bomber 80.7 × 81.45; Enslaved Giant 184.5 × 264.1; Chaos Giant 299.95 × 288.35. Boulder contact tests use these unscaled Unit-local measurements; only the projectile points and the Giant body transform carry perspective. Statue.init captures width 175.2 and height 175 before Team changes its artwork. Adobe confirms that both teams retain these bounds regardless of the visible statue skin. `GIANT_GROWTH_I/II` in CampaignBomber are Order flags; they do not grant the differently keyed Chaos Giant growth technologies.
 
 Reference artifacts are in `evidence/adobe-bomber/`; the separate prepared throw fixture confirms the original animation and armored hit and is not evidence of natural battle balance. `bomber_probe` exercises natural wave escalation, the valid six-point Growth II prerequisite chain, recruitment/refund/cooldown, victory, defeat, save reload, and map frame 401. Native window checks are recorded separately in `evidence/windows-bomber/`. Full combat parity remains under review.
+
+
+## The Night is Dark: Juggerknights (mission 8)
+
+`CampaignKnight` maps to `src/campaign_knight.cpp`. Once any living allied unit passes the midpoint, its SPACE hint lasts 152 controller updates and appears only once. SPACE selects living attacking units outside the garrison; a second tap within 400 ms also centers the camera on the forward unit. Both native frontends implement the shortcut.
+
+Knight actor 5724 retains stand 4932, run 4979, attacks 5003/5254/5286, and death 5105, with authored tip markers and the additional sword1 hit sound. Its default equipment is stopped independently from the body timeline, including the direct sword loadout call. Adobe reports a Unit-local collider of 118.8 by 175.8. Original XML supplies 400 HP, armor, damage 15 plus 5 against unarmored targets, 450 gold/50 mana, population 3, and training counter 600.
+
+The Chaos build roster is filtered from each level's allowed units, retaining Giant/Knight/Bomber priority, composition thresholds, and independent building queues. The first castle research activates a Dead defender rather than also spawning an Order archer. Charge resources/data are exported, but the original campaign AI neither grants nor orders Knight charge here; its unreachable command path is not claimed as translated. Higher-difficulty enemy walls, the second castle research, complete duels, and full natural combat parity remain open.
+
+The next campaign map uses frame 441. `knight_probe` checks the original starting army, native recruitment, SPACE selection, hint duration, battle victory, and save round trip. `tools/check_knight.py` exercises the real Windows executable; `tools/reference_battle.py WIDTH HEIGHT --knight` records Adobe deployment and a separately marked prepared hint fixture. Reference evidence is in `evidence/adobe-knight/`, native evidence in `evidence/windows-knight/`.
+
+The Desert sky keeps its single original moon. Native rendering extends the flat sky color beneath the cloud layers instead of reflecting the moon into the additional 16:9 space. The original 850-unit composition and battlefield dimensions remain unchanged.

@@ -55,7 +55,7 @@ def run(width,height):
                 time.sleep(11);click(161,664);time.sleep(1.2);click(578,664)
                 wait(lambda r:r[0]=='101' and r[1]=='341');shot('map-entry');click(207,299)
                 initial=wait(lambda r:r[0]=='27')
-                assert len(initial)==44 and initial[34]=='6' and initial[35]=='1' and float(initial[11])==1500,initial
+                assert len(initial)>=44 and initial[34]=='6' and initial[35]=='1' and float(initial[11])==1500,initial
                 shot('entry');click(310,600);time.sleep(2.6)
                 current=row();assert float(current[2])<=201,current
                 shot('castle-left');click(550-float(current[2]),300);click(675,606)

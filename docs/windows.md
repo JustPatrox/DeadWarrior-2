@@ -133,7 +133,7 @@ Use either resolution with each mode. These tests prepare temporary saves at the
 
 ## Massive Battle and camera bounds
 
-The sixth mission implements Desert, Giant, Chaos workers, CastleDeads, and CampaignCutScene1. The controller holds the enemy statue at 180 health and enemy gold at zero. Killing the first Giant starts the fades, three Medusa voices, and four rebel spokesperson voices. The last voice triggers victory and unlocks Enslaved Giant. The next map reaches frame 341; the seventh battle displays the work-in-progress screen.
+The sixth mission implements Desert, Giant, Chaos workers, CastleDeads, and CampaignCutScene1. The controller holds the enemy statue at 180 health and enemy gold at zero. Killing the first Giant starts the fades, three Medusa voices, and four rebel spokesperson voices. The last voice triggers victory and unlocks Enslaved Giant. The next map reaches frame 341; the seventh battle is implemented by CampaignBomber below.
 
 ```powershell
 .\tools\build_windows.ps1 -CheckGiants
@@ -193,7 +193,7 @@ Adobe projector references operate the original controllers through a diagnostic
 
 Menu references also use local Ruffle web 0.7.1 with Canvas rendering and the game's external network disabled. Optional setup uses Playwright 1.65.2 and local browser files under `work/tools/`. Timing-based SWF animation samples may differ across runs; C++ capture ticks are deterministic.
 
-Full parity of collisions, duels, AI, sieges, the tutorial's natural battle timing, remaining cinematics, higher-DPI behavior, and all interface states is not yet established. Prepared reference scenes are distinguished from complete original-game playthroughs. Windows validation and the full campaign remain open; macOS and Linux have not started.
+Full parity of collisions, duels, AI, sieges, the tutorial's natural battle timing, remaining cinematics, higher-DPI behavior, and all interface states is not yet established. Prepared reference scenes are distinguished from complete original-game playthroughs. Windows validation and the full campaign remain open. Native macOS/Linux previews share this campaign; see portable.md for platform checks and limitations.
 
 
 ## Seventh mission: Explosive War
@@ -214,3 +214,25 @@ work/venv/Scripts/python.exe tools/check_bomber.py 1920 1080
 ```
 
 The script uses temporary campaign saves and private client captures, validates full waves, Giant production, victory, upgrades, map travel and saving, and checks captured scenes for uncovered magenta pixels. Evidence: `evidence/windows-bomber/`. The Adobe prepared actor reference is `tools/reference_battle.py WIDTH HEIGHT --bomber`; it uses a diagnostic copy and leaves the original SWF unchanged.
+
+
+## Eighth mission: The Night is Dark
+
+```powershell
+.\tools\build_windows.ps1 -CheckKnight
+work/venv/Scripts/python.exe tools/check_knight.py 1280 720
+work/venv/Scripts/python.exe tools/check_knight.py 1920 1080
+work/venv/Scripts/python.exe tools/reference_battle.py 1280 720 --knight
+work/venv/Scripts/python.exe tools/reference_battle.py 1920 1080 --knight
+```
+
+The deterministic probe follows the original deployment, recruits an army using original costs, checks the 152-update SPACE hint, reaches victory, reloads the level-8 save with two unspent points, and advances to map frame 441. The Win32 script uses a temporary level-7 save with six earned upgrades and one unspent point; it checks the actual SPACE shortcut, recruitment, projectiles, victory, keeping both points, map travel, saving, and magenta coverage. Campaign availability is centralized in CampaignProgress::playableLevelCount. An unfinished next mission displays the requested work-in-progress screen.
+
+Run every campaign regression after shared combat changes:
+
+```powershell
+cmake --build build/windows --config Release --target campaign_probes
+ctest --test-dir build/windows -C Release --output-on-failure
+```
+
+Adobe's prepared midpoint actor triggers the original hint without establishing natural battle balance. Collision bounds measured from the original are separate from cropped art bounds. The statue collider remains 175.2 by 175 after a skin change; Giant aim transforms carry body perspective, while target collider bounds remain in Unit coordinates. Full battle and random-sequence parity remain under review.

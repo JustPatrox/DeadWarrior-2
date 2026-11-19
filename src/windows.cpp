@@ -188,7 +188,7 @@ class Window {
     HWND hwnd_{};
     bool diagnostic_{},forceSoftware_{};
     std::unique_ptr<gd::Bitmap> buffer_;
-    Clock::time_point gameDeadline_{},lastPaint_{};
+    Clock::time_point gameDeadline_{},lastPaint_{},lastArmySelect_{};
     std::deque<Clock::time_point> presentedFrames_;
     double measuredFps_{};
     Point mouse_{-1,-1};
@@ -287,7 +287,8 @@ class Window {
             if (progress_.level>=3 && !assets_.art.contains({7531,1})) assets_.loadTextures(directory_.parent_path()/"magic");
             if (progress_.level>=4 && !assets_.art.contains({4067,1})) assets_.loadTextures(directory_.parent_path()/"rebels");
             if (progress_.level>=5 && !assets_.art.contains({6465,1})) assets_.loadTextures(directory_.parent_path()/"giants");
-            if (progress_.level==6 && !assets_.art.contains({8771,1})) assets_.loadTextures(directory_.parent_path()/"bomber");
+            if (progress_.level>=6 && !assets_.art.contains({8771,1})) assets_.loadTextures(directory_.parent_path()/"bomber");
+            if (progress_.level>=7 && !assets_.art.contains({4932,1})) assets_.loadTextures(directory_.parent_path()/"knight");
             tutorial_=std::make_unique<CampaignTutorial>(assets_,directory_.parent_path(),progress_);
         }
         intermission_.reset();
@@ -437,7 +438,8 @@ class Window {
                                   <<'\t'<<battle.giants<<'\t'<<battle.giantHits<<'\t'<<battle.cinematic<<'\t'<<battle.dialogue
                                   <<'\t'<<battle.bombers<<'\t'<<battle.bomberWaves<<'\t'<<battle.nextBomberWave
                                   <<'\t'<<battle.explosions<<'\t'<<battle.boulderShots<<'\t'<<battle.boulderHits<<'\t'<<battle.enslavedGiants
-                                  <<'\t'<<battle.miners<<'\t'<<battle.archers<<'\t'<<battle.population<<std::endl;
+                                  <<'\t'<<battle.miners<<'\t'<<battle.archers<<'\t'<<battle.population
+                                  <<'\t'<<battle.enemyKnights<<'\t'<<battle.selectedMilitary<<'\t'<<battle.knightHint<<std::endl;
                 }
                 auto voice=tutorial_->takeVoice();
                 if (!voice.empty()) {
@@ -759,6 +761,8 @@ class Window {
             else if (w==VK_ESCAPE && display_.mode()!=Mode::Windowed && !repeated) {
                 display_.setMode(hwnd_,Mode::Windowed);
                 InvalidateRect(hwnd_,nullptr,FALSE);
+            } else if (w==VK_SPACE && tutorial_ && !display_.isOpen() && !repeated) {
+                const auto now=Clock::now();tutorial_->selectArmy(now-lastArmySelect_<std::chrono::milliseconds(400));lastArmySelect_=now;
             } else if ((w=='Q' || w=='W' || w=='E') && tutorial_ && !display_.isOpen() && !repeated) {
                 tutorial_->unitAbility(w=='Q' ? 0 : w=='W' ? 1 : 2);
             } else if (display_.isOpen() && (!repeated || (w!=VK_RETURN && w!=VK_SPACE))) {

@@ -55,6 +55,8 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
         if (u.enemy && u.symbol==giant) {++status.giants; status.giantHealth+=u.hp;}
         if (u.enemy && u.symbol==bomber) ++status.bombers;
         if (!u.enemy && u.symbol==enslavedGiant) ++status.enslavedGiants;
+        if (u.enemy && u.symbol==knight) ++status.enemyKnights;
+        if (!u.enemy && !isWorker(u.symbol) && u.selected) ++status.selectedMilitary;
     }
     status.mobileShots=mobileShots_; status.towerControl=towerControl_;
     status.magicHits=magicHits_; status.heals=heals_; status.enemyCastleShots=enemyCastleShots_;
@@ -62,6 +64,7 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
     status.giantHits=giantHits_; status.cinematic=cinematic_; status.dialogue=dialogueIndex_;
     status.bomberWaves=bomberWaves_;status.nextBomberWave=nextBomberWave_;status.explosions=explosions_;
     status.boulderShots=boulderShots_;status.boulderHits=boulderHits_;
+    status.knightHint=knightHintTicks_;
     return status;
 }
 CampaignTutorial::Unit& CampaignTutorial::combatTarget(int id) {
@@ -268,7 +271,15 @@ void CampaignTutorial::updateOpponent() {
         production_[1][0].units.empty()) recruit(true,0);
     // The first level's military build order contains only the Spearton. After
     // meeting its composition target the original repeats that same build order.
-    if (mission_==6) {
+    if (mission_>=7) {
+        auto count=[&](int type){return std::count_if(units_.begin(),units_.end(),[&](const Unit& u){return u.enemy && u.hp>0 && u.symbol==type;});};
+        const bool full=std::all_of(enemyBuild_.begin(),enemyBuild_.end(),[&](const EnemyBuild& entry){return count(entry.symbol)>=rules_.at("composition."+entry.name);});
+        for (const auto& entry:enemyBuild_) {
+            if (entry.symbol==bomber && military[1]<6) continue;
+            if (production_[1][entry.building].units.empty() && (full || count(entry.symbol)<rules_.at("composition."+entry.name)))
+                recruit(true,entry.building,false,entry.symbol);
+        }
+    } else if (mission_==6) {
         auto count=[&](int type){return std::count_if(units_.begin(),units_.end(),[&](const Unit& u){return u.enemy && u.hp>0 && u.symbol==type;});};
         const bool full=count(giant)>=rules_.at("composition.Giant") && count(bomber)>=rules_.at("composition.Bomber");
         if (production_[1][5].units.empty() && (full || count(giant)<rules_.at("composition.Giant"))) recruit(true,5,false,giant);
@@ -306,6 +317,11 @@ void CampaignTutorial::updateOpponent() {
         if (production_[1][1].units.empty() && (full || swords<rules_.at("composition.Swordwrath"))) recruit(true,1);
         if (production_[1][building].units.empty() && (full || count<desired)) recruit(true,building,false,type);
     }
+    if (chaosOpponent_ && !enemyCastleArcher_ && enemyCastleResearchTicks_<0 &&
+        enemyGold_>rules_.at("castleArchers1.cost") && enemyMana_>rules_.at("castleArchers1.mana")) {
+        enemyGold_-=int(rules_.at("castleArchers1.cost"));enemyMana_-=int(rules_.at("castleArchers1.mana"));
+        enemyCastleResearchTicks_=int(rules_.at("castleArchers1.time"));
+    }
 }
 void CampaignTutorial::simulateActors(bool strategy) {
     if (statues_[1].hp<=0 || statues_[0].hp<=0) {
@@ -314,9 +330,11 @@ void CampaignTutorial::simulateActors(bool strategy) {
     }
     if (step_>=Step::Commands) updateBattle(strategy);
     for (auto& u:units_) updateUnit(u);
+    if (enemyCastleResearchTicks_>=0 && --enemyCastleResearchTicks_<0) enemyCastleArcher_=true;
     if (castleArcher_) updateCastleArcher();
-    if (enemyCastleArcher_) updateCastleArcher(true);
-    if (chaosOpponent_) updateCastleDead();
+    if (enemyCastleArcher_) {
+        if (chaosOpponent_) updateCastleDead();else updateCastleArcher(true);
+    }
     updateMobileArrows();
     updateBoulders();
     if (mission_>=3) updateMagic();
@@ -329,6 +347,7 @@ void CampaignTutorial::updateBattle(bool strategy) {
     }
     if (strategy) updateOpponent();
     if (strategy && mission_==6) updateBomberController();
+    if (strategy && mission_==7) updateKnightController();
     for (auto& u:units_) {
         if (!u.canFight || !u.engageOnMove || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
         const auto& statue=statues_[!u.enemy];

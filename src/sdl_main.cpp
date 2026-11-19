@@ -33,7 +33,7 @@ class Application {
     SDL_Texture* buffer_{};
     int bufferWidth_{},bufferHeight_{},lastStep_{-1},lastLogTick_{};
     bool running_{true},notice_{true},pauseButton_{},optionPending_{};
-    Clock::time_point noticeEnd_{Clock::now()+std::chrono::seconds(3)},bannerEnd_{};
+    Clock::time_point noticeEnd_{Clock::now()+std::chrono::seconds(3)},bannerEnd_{},lastArmySelect_{};
     std::string banner_;
     double fps_{};
     void log(const std::string& text) {log_<<SDL_GetTicks()<<' '<<text<<std::endl;}
@@ -121,7 +121,7 @@ public:
         :window_(window),root_(std::move(root)),assetsDir_(root_/"assets"),saveDir_(std::move(saves)),
          log_(saveDir_/"lastest.log",std::ios::trunc),art_(assetsDir_/"menu"),menu_(art_),renderer_(window,art_,root_),
          audio_(assetsDir_/"audio",[this](std::string text){log(text);}),display_(window,renderer_.native(),saveDir_/"options.ini"),pause_(art_) {
-        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
+        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","knight","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
         loadSave();menu_.restart(saved_.has_value());
         if(auto icon=SDL_LoadPNG((root_/"icon.png").string().c_str())) {SDL_SetWindowIcon(window_,icon);SDL_DestroySurface(icon);}
         log(std::string("START platform=")+SDL_GetPlatform()+" renderer="+SDL_GetRendererName(renderer_.native()));
@@ -171,7 +171,8 @@ public:
             if(key==SDLK_TAB||key==SDLK_DOWN||key==SDLK_RIGHT) wip_->focus(1);
             else if(key==SDLK_UP||key==SDLK_LEFT) wip_->focus(-1);
             else if(key==SDLK_RETURN||key==SDLK_SPACE) wipAction(wip_->selected());
-        } else if(battle_&&(key==SDLK_Q||key==SDLK_W||key==SDLK_E)) battle_->unitAbility(key==SDLK_Q ? 0 : key==SDLK_W ? 1 : 2);
+        } else if(battle_&&key==SDLK_SPACE) {const auto now=Clock::now();battle_->selectArmy(now-lastArmySelect_<std::chrono::milliseconds(400));lastArmySelect_=now;}
+        else if(battle_&&(key==SDLK_Q||key==SDLK_W||key==SDLK_E)) battle_->unitAbility(key==SDLK_Q ? 0 : key==SDLK_W ? 1 : 2);
     }
     void keyRelease(SDL_Keycode key) {
         // Option is a modifier on macOS. A standalone tap is the menu shortcut;
@@ -285,6 +286,10 @@ public:
         require(!pause_.isOpen(),"Pause did not resume");for(int i=0;i<15;++i) tick();require(battle_->ticks()==before+15,"Resume changed simulation rate");
         for(int level=1;level<CampaignProgress::playableLevelCount;++level) {
             progress_={};progress_.level=level;progress_.points=level;startBattle();for(int i=0;i<60;++i) tick();
+            if(level==7) {
+                key(SDLK_SPACE);keyRelease(SDLK_SPACE);
+                require(battle_->battleStatus().selectedMilitary==3,"SPACE did not select the three starting soldiers");
+            }
             draw(1280,720,out/("mission-"+std::to_string(level+1)+"-720.png"));draw(1920,1080,out/("mission-"+std::to_string(level+1)+"-1080.png"));
         }
         openCampaign(CampaignIntermission::Page::Upgrades);draw(1280,720,out/"upgrades.png");openCampaign(CampaignIntermission::Page::Map);for(int i=0;i<90;++i) tick();draw(1280,720,out/"map.png");

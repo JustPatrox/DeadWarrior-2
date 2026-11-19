@@ -31,13 +31,13 @@ The directory contains `campaign.sav`, `options.ini`, and one overwritten `laste
 
 ## Validation
 
-The release workflow builds each architecture on its own GitHub-hosted runner, runs the tutorial/Archidon/magic/rebels/giants/bomber deterministic probes, installs the package, and runs the portable executable with `--smoke-test out/checks --save-dir out/test-save`. The smoke test uses the actual renderer and shared input handlers to check menu navigation, all seven mission entries at 720p/1080p, pause/resume, persistent options, audio loading/playback, save reload, and the unfinished-content guard. Linux runs under Xvfb with Mesa; macOS uses its desktop renderer. The CI audio device is a dummy device; this does not verify physical speakers or every hardware/driver combination.
+The release workflow builds each architecture on its own GitHub-hosted runner, runs the tutorial/Archidon/magic/rebels/giants/bomber/knight deterministic probes, installs the package, and runs the portable executable with `--smoke-test out/checks --save-dir out/test-save`. The smoke test uses the actual renderer and shared input handlers to check menu navigation, all eight mission entries at 720p/1080p, pause/resume, persistent options, audio loading/playback, save reload, and the unfinished-content guard. Linux runs under Xvfb with Mesa; macOS uses its desktop renderer. The CI audio device is a dummy device; this does not verify physical speakers or every hardware/driver combination.
 
 Screenshots, logs, and JSON reports are retained as workflow artifacts. Full gameplay parity and manual testing on additional systems remain ongoing.
 
 ## Release automation
 
-Publishing a GitHub release triggers **Native release builds**. Prepare the release with a ready-to-play `DeadWarrior-2-Windows-x64.zip` asset before publishing, or use the manual workflow's `assets_tag` to select an existing compatible asset source. The workflow extracts only prepared assets, compiles all four architecture packages, and attaches them only after every build and required check passes. Existing archive assets are preserved; `SHA256SUMS.txt` is refreshed from GitHub's uploaded digests.
+Publishing a GitHub release triggers **Native release builds**. Prepare the release with a ready-to-play `DeadWarrior-2-Windows-x64.zip` asset before publishing, or use the manual workflow's `assets_tag` to select an existing compatible asset source. The workflow extracts only prepared assets, compiles all four architecture packages, and attaches them only after every build and required check passes. The existing Windows seed is preserved, rebuilt macOS/Linux packages replace their prior versions, and `SHA256SUMS.txt` is refreshed from GitHub's uploaded digests.
 
 To prepare all downloads before making a release visible, create a draft, attach the prepared Windows archive, and dispatch the workflow with its tag. Publish the draft after every native job and package upload succeeds. The published event skips a second build when all four package names are already present.
 

@@ -54,7 +54,9 @@ CampaignTutorial::CampaignTutorial(const MenuAssets& art,const std::filesystem::
         s.symbol=1904; s.enemy=i!=0;
         s.position={i ? length_-legacyWidth-500 : legacyWidth+500,depth_/2};
         s.maxHp=s.hp=rules_.at(i ? "oponent.statueHealth" : "player.statueHealth");
-        s.width=art_.texture(1904,i ? 10 : 1).bounds.w*.8/2; s.height=175;
+        // Statue.init captures the initial skin before Team.updateStatue.
+        // Changing its artwork does not recalculate this original collider.
+        s.width=175.2; s.height=175;
         median_[i]=i ? length_-legacyWidth : legacyWidth;
     }
     // com.brockw.random.Random, campaign Main.seed = 0.
@@ -114,7 +116,7 @@ double CampaignTutorial::stat(const Unit& u,const char* name) const {
 double CampaignTutorial::stat(int symbol,const char* name) const {
     const char* prefix=symbol==miner ? "miner." : symbol==spearton ? "spearton." : symbol==archer ? "archer." : symbol==ninja ? "ninja." :
         symbol==wizard ? "magikill." : symbol==healer ? "monk." : symbol==chaosMiner ? "chaosMiner." :
-        symbol==giant ? "giant." : symbol==enslavedGiant ? "enslavedGiant." : symbol==medusa ? "medusa." : symbol==dead ? "dead." : symbol==bomber ? "bomber." : "swordwrath.";
+        symbol==giant ? "giant." : symbol==enslavedGiant ? "enslavedGiant." : symbol==medusa ? "medusa." : symbol==dead ? "dead." : symbol==bomber ? "bomber." : symbol==knight ? "knight." : "swordwrath.";
     if (std::string_view(name)=="hitWidth" || std::string_view(name)=="hitHeight") {
         if (const auto found=rules_.find(std::string(prefix)+name);found!=rules_.end()) return found->second;
         const auto& pose=animations_.at({symbol,"stand"});
@@ -228,7 +230,8 @@ void CampaignTutorial::updateUnit(Unit& u) {
             const int facing=dx<0 ? -1 : 1;
             if (std::abs(dx)<reach && std::abs(dy)<40 && u.facing==facing) {
                 if (u.symbol==bomber) {u.hp=0;return;}
-                animate(u,(u.symbol!=sword && u.symbol!=ninja && u.symbol!=giant) || random()%2==0 ? "attack_1" : "attack_2"); u.hit=false;
+                animate(u,u.symbol==knight ? "attack_"+std::to_string(random()%3+1) :
+                    (u.symbol!=sword && u.symbol!=ninja && u.symbol!=giant) || random()%2==0 ? "attack_1" : "attack_2"); u.hit=false;
                 u.targetsHit=0;
                 if (u.symbol==ninja) sound("ninjaSwipe"+std::to_string(1+soundSequence_++%4),u.position);
                 else if (u.symbol==sword || u.symbol==spearton || isWorker(u.symbol)) sound("swordwrathSwing1",u.position);
@@ -289,6 +292,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
                 if (mission_>=3) applyMagicDamage(target,damage,u.enemy);
                 else target.hp=std::max(0.,target.hp-damage/modifier);
                 impactSound(target);
+                if (u.symbol==knight) sound("sword1",u.position);
                 u.hit=true;
             }
         }
@@ -598,7 +602,12 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         const auto key="layer."+std::to_string(symbol)+".width";
         const double width=rules_.contains(key) ? rules_.at(key) : art_.texture(symbol).bounds.w;
         const double offset=camera_/(length_-legacyWidth)*(width-legacyWidth);
-        for (int plate:{2,3,1}) out.push_back(sprite(symbol,plate,{-offset,0}));
+        if (symbol==4094) {
+            // Desert's flat sky includes one moon near its right edge.
+            // Continue its authored color without reflecting a second moon.
+            out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::right-Viewport::left,700},0x2d2d4b));
+            out.push_back(sprite(symbol,1,{-offset,0}));
+        } else for (int plate:{2,3,1}) out.push_back(sprite(symbol,plate,{-offset,0}));
     }
     std::vector<std::pair<double,Draw>> layers;
     for (int direction:{1,-1}) {
@@ -685,8 +694,9 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         }
     }
     if (castleArcher_) drawCastleArcher(layers);
-    if (enemyCastleArcher_) drawCastleArcher(layers,true);
-    if (chaosOpponent_) drawCastleDead(layers);
+    if (enemyCastleArcher_) {
+        if (chaosOpponent_) drawCastleDead(layers);else drawCastleArcher(layers,true);
+    }
     drawArrows(layers);
     drawBoulders(layers);
     drawMagic(layers);
@@ -770,6 +780,12 @@ std::vector<Draw> CampaignTutorial::drawList() const {
             "Capturing the center tower will award you a continuous stream of gold for as long as you hold the tower";
         out.push_back(Draw::label({at.x-198.3*scale,at.y-39.45*scale,396.6*scale,100*scale},text,17*scale,0xffffff,true));
         if (hint_==1) out.push_back(sprite(1924,1+ticks_%32,{817,665}));
+    }
+    if (knightHintTicks_>=0) {
+        constexpr double size=1.3;
+        out.push_back(sprite(10139,1,{425,100},size));
+        out.push_back(Draw::label({425-198.3*size,100-39.45*size,396.6*size,100*size},
+            "Press SPACE to select all of your attacking units",17*size,0xffffff,true));
     }
     if (displayed_ && step_<=Step::Objective) {
         const double yOffset=displayed_==10 ? 75 : displayed_==16 ? 250 : 0;

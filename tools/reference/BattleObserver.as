@@ -48,8 +48,8 @@ package {
                 var app:Object=DisplayObjectContainer(root).getChildAt(0);
                 if(!("currentScreen" in app)) return;
                 var request:int=socket.bytesAvailable ? socket.readUnsignedByte() : 0;
-                if((request>=66 && request<=70) || request==72) {
-                    app.campaign.currentLevel=request==72 ? 6 : request-65;
+                if((request>=66 && request<=70) || request==72 || request==74) {
+                    app.campaign.currentLevel=request==74 ? 7 : request==72 ? 6 : request-65;
                     app.campaign.campaignPoints=app.campaign.currentLevel;
                     app.campaign.difficultyLevel=1;
                     app.showScreen("campaignGameScreen");
@@ -82,12 +82,21 @@ package {
                         gs.team.enemyTeam.population+=rival.population;
                         app.stickWar.screenX=app.stickWar.targetScreenX=2200;
                     }
+                    if(request==75 && app.campaign.currentLevel==7) {
+                        var forwardActor:Object=gs.game.unitFactory.getUnit(9);
+                        gs.team.spawn(forwardActor,gs.game);forwardActor.px=3300;forwardActor.py=gs.game.map.height/2;
+                        gs.team.population+=forwardActor.population;
+                        app.stickWar.screenX=app.stickWar.targetScreenX=3000;
+                    }
                     camera=int(app.stickWar.screenX);
                     frame=app.stickWar.frame;
                     selected=gs.userInterface.selectedUnits.selected.length;
                     details=gs.team.gold+","+gs.team.mana+","+gs.team.population+","+gs.team.statue.health+","+gs.team.enemyTeam.statue.health;
                     if(request==83) {
                         for each(var team:Object in [gs.team,gs.team.enemyTeam]) {
+                            var monument:Object=team.statue;
+                            actors+=team.id+","+monument.type+","+int(monument.px)+","+int(monument.py)+","+int(monument.health)+
+                                    ","+monument.pwidth+","+monument.pheight+",0,0,statue;";
                             for each(var unit:Object in team.units) {
                                 var body:Object=unit.mc;
                                 var pose:String=body.currentLabel;

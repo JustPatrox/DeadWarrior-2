@@ -26,6 +26,8 @@ STEPS = (
     ("build_archidon_map.py", "--level", "7"),
     ("build_bomber_assets.py",),
     ("build_archidon_map.py", "--level", "8"),
+    ("build_knight_assets.py",),
+    ("build_archidon_map.py", "--level", "9"),
     ("build_interaction_assets.py",),
     ("build_wip_assets.py",),
     ("build_pause_assets.py",),

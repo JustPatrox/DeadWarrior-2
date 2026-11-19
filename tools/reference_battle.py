@@ -78,7 +78,7 @@ class BattleReadback:
         print(name,state,flush=True)
 
 
-def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,magic=False,rebels=False,giants=False,bomber=False):
+def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,magic=False,rebels=False,giants=False,bomber=False,knight=False):
     fixture=diagnostic_copy(Path(__file__).parent/"reference/BattleObserver.as")
     feed=BattleReadback(width,height,reinforce,archidon)
     if shadow:
@@ -95,6 +95,9 @@ def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,ma
         feed.out.mkdir(exist_ok=True,parents=True)
     if bomber:
         feed.out=root/"evidence/adobe-bomber"
+        feed.out.mkdir(exist_ok=True,parents=True)
+    if knight:
+        feed.out=root/"evidence/adobe-knight"
         feed.out.mkdir(exist_ok=True,parents=True)
     class Stream(socketserver.StreamRequestHandler):
         def handle(self):
@@ -146,12 +149,18 @@ def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,ma
                     def visible(step): return lambda s:s["page"]=="campaignGameScreen" and s["step"]==f"Step #{step}"
                     def settled(name,step,delay=2.5):
                         feed.until(visible(step),45); time.sleep(delay); feed.shot(name,visible(step))
-                    if archidon or shadow or magic or rebels or giants or bomber:
-                        feed.connection.sendall(b"H" if bomber else b"F" if giants else b"E" if rebels else b"D" if magic else b"C" if shadow else b"B")
+                    if archidon or shadow or magic or rebels or giants or bomber or knight:
+                        feed.connection.sendall(b"J" if knight else b"H" if bomber else b"F" if giants else b"E" if rebels else b"D" if magic else b"C" if shadow else b"B")
                         active=lambda s:s["page"]=="campaignGameScreen"
                         feed.until(active,30)
                         send(0x200,425,225)
                         feed.shot("entry",active)
+                        if knight:
+                            time.sleep(2);feed.shot("deployment",active)
+                            feed.connection.sendall(b"K");time.sleep(1)
+                            feed.shot("prepared-space-hint",lambda s:active(s) and "SPACE" in s["message"])
+                            time.sleep(5);feed.shot("hint-expired",lambda s:active(s) and "SPACE" not in s["message"])
+                            return
                         if bomber:
                             assert sum(u["type"]==14 for u in feed.evidence["entry"]["units"])==6,feed.evidence["entry"]
                             feed.connection.sendall(b"I")
@@ -251,4 +260,5 @@ if __name__=="__main__":
     parser.add_argument("--rebels",action="store_true")
     parser.add_argument("--giants",action="store_true",help="prepare Giant death to inspect the original campaign cinematic")
     parser.add_argument("--bomber",action="store_true",help="record CampaignBomber entry and a prepared original Giant throw")
-    args=parser.parse_args(); run(args.width,args.height,args.battle,args.reinforce,args.archidon,args.shadow,args.magic,args.rebels,args.giants,args.bomber)
+    parser.add_argument("--knight",action="store_true",help="record Juggerknight deployment and prepared campaign instruction")
+    args=parser.parse_args(); run(args.width,args.height,args.battle,args.reinforce,args.archidon,args.shadow,args.magic,args.rebels,args.giants,args.bomber,args.knight)
