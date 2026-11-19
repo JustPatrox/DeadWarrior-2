@@ -9,3 +9,7 @@ The DeadWarrior 2 logo and helmet icon were supplied by the project owner. The s
 Preparation dependencies — JPEXS FFDec, Java, Pillow, NumPy, JPype, and imageio-ffmpeg — are obtained separately and retain their own licenses.
 
 A distribution license for this project's code has not yet been selected. This notice does not apply a new license to original game resources or trademarks.
+
+## Portable platform libraries
+
+The macOS and Linux frontend uses SDL 3 (zlib license) and stb_truetype (MIT/public domain). Their license texts are included with the downloads. Noto Sans is distributed under the SIL Open Font License 1.1; see `art/fonts/OFL.txt`. These libraries do not replace the native C++ campaign simulation.

@@ -1,0 +1,142 @@
+name: Native release builds
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release to receive the native packages
+        required: true
+        default: v0.0.0-preview.2
+      assets_tag:
+        description: Release containing prepared Windows assets (empty uses release_tag)
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+  ASSETS_TAG: ${{ inputs.assets_tag || github.event.release.tag_name || inputs.release_tag }}
+
+jobs:
+  native:
+    name: Build and test ${{ matrix.package }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            package: Linux-x64
+          - runner: macos-15
+            package: macOS-arm64
+          - runner: macos-15-intel
+            package: macOS-x64
+          - runner: windows-2022
+            package: Windows-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Fetch prepared release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$ASSETS_TAG" --repo "$GITHUB_REPOSITORY" --pattern 'DeadWarrior-2-Windows-x64.zip' --dir work
+          python tools/package_release.py assets --archive work/DeadWarrior-2-Windows-x64.zip
+      - name: Install Linux build and test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ninja-build libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libegl1-mesa-dev libdrm-dev libgbm-dev xvfb
+      - name: Configure native build
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+      - name: Configure Windows build
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build/native -G 'Visual Studio 17 2022' -A x64
+      - name: Compile native game and campaign probes
+        run: cmake --build build/native --config Release --parallel 3 --target DeadWarrior2 tutorial_probe archidon_probe magic_probe rebels_probe giants_probe
+      - name: Run deterministic campaign checks
+        run: |
+          suffix=''; directory='build/native'
+          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; directory="$directory/Release"; fi
+          for probe in tutorial archidon magic rebels giants; do "$directory/${probe}_probe$suffix" assets; done
+      - name: Install ready-to-play package
+        run: cmake --install build/native --config Release --prefix out/package
+      - name: Test Linux window, renderer, input, audio, pause and saves
+        if: runner.os == 'Linux'
+        env:
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: xvfb-run -a 'out/package/DeadWarrior 2' --smoke-test out/checks --save-dir out/test-save
+      - name: Test macOS window, renderer, input, audio, pause and saves
+        if: runner.os == 'macOS'
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: '"out/package/DeadWarrior 2.app/Contents/MacOS/DeadWarrior 2" --smoke-test out/checks --save-dir out/test-save'
+      - name: Package native download
+        run: python tools/package_release.py pack --name '${{ matrix.package }}'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: ${{ matrix.package }}
+          path: |
+            out/releases/*
+            out/checks/*
+            out/test-save/lastest.log
+          if-no-files-found: warn
+
+  publish:
+    name: Attach verified packages
+    needs: native
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          path: artifacts
+      - name: Upload packages and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > existing.json
+          while IFS= read -r file; do
+            name="$(basename "$file")"
+            if jq -e --arg name "$name" '.assets[] | select(.name == $name)' existing.json >/dev/null; then
+              echo "Preserving existing release asset: $name"
+            else
+              gh release upload "$RELEASE_TAG" "$file" --repo "$GITHUB_REPOSITORY"
+            fi
+          done < <(find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) | sort)
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > uploaded.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          assets=json.loads(Path('uploaded.json').read_text())['assets']
+          rows=[]
+          for item in sorted(assets,key=lambda a:a['name']):
+              if item['name'].endswith(('.zip','.tar.gz')):
+                  digest=item.get('digest','')
+                  if not digest.startswith('sha256:'): raise ValueError('Missing uploaded digest: '+item['name'])
+                  rows.append(digest.removeprefix('sha256:')+'  '+item['name'])
+          Path('SHA256SUMS.txt').write_text('\n'.join(rows)+'\n')
+          PY
+          gh release upload "$RELEASE_TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
