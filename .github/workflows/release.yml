@@ -81,13 +81,13 @@ jobs:
       - name: Test Linux window, renderer, input, audio, pause and saves
         if: runner.os == 'Linux'
         env:
-          SDL_AUDIODRIVER: dummy
+          SDL_AUDIO_DRIVER: dummy
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: xvfb-run -a 'out/package/DeadWarrior 2' --smoke-test out/checks --save-dir out/test-save
       - name: Test macOS window, renderer, input, audio, pause and saves
         if: runner.os == 'macOS'
         env:
-          SDL_AUDIODRIVER: dummy
+          SDL_AUDIO_DRIVER: dummy
         run: '"out/package/DeadWarrior 2.app/Contents/MacOS/DeadWarrior 2" --smoke-test out/checks --save-dir out/test-save'
       - name: Package native download
         run: python tools/package_release.py pack --name '${{ matrix.package }}'

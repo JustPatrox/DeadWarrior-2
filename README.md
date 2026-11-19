@@ -4,14 +4,14 @@
 
 <p align="center">
   <strong>A native port of Stick War 2. Work in progress.</strong><br>
-  C++20 · Windows x64 · 16:9 presentation
+  C++20 · Windows · macOS · Linux · 16:9 presentation
 </p>
 
 <p align="center">
   <a href="https://github.com/JustPatrox/DeadWarrior-2/actions/workflows/windows.yml"><img src="https://github.com/JustPatrox/DeadWarrior-2/actions/workflows/windows.yml/badge.svg" alt="Windows build"></a>
   <img src="https://img.shields.io/badge/status-work_in_progress-e5b344" alt="Work in progress">
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
-  <img src="https://img.shields.io/badge/platform-Windows_x64-0078D4" alt="Windows x64">
+  <img src="https://img.shields.io/badge/platform-Windows_%7C_macOS_%7C_Linux-0078D4" alt="Windows, macOS and Linux">
 </p>
 
 <p align="center">
@@ -25,9 +25,9 @@
 
 ## About
 
-DeadWarrior 2 translates the game's logic into C++ and adapts its presentation to 16:9 displays. The executable uses Direct2D and XAudio2, with a software rendering fallback. The simulation runs at **30 Hz**, independently of the rendering frame rate.
+DeadWarrior 2 translates the game's logic into C++ and adapts its presentation to 16:9 displays. Windows uses Direct2D and XAudio2, with a software rendering fallback. macOS and Linux use an SDL 3 frontend with the same C++ campaign simulation. The simulation runs at **30 Hz**, independently of the rendering frame rate.
 
-The Windows download is a **native, ready-to-play port**: `DeadWarrior 2.exe` and its prepared `assets` folder. **No SWF, Flash Player, Java, Python, or emulator is needed to play.** The game runs its translated C++ controllers rather than loading the original SWF.
+The downloads are **native, ready-to-play ports**, with prepared assets included. Windows uses `DeadWarrior 2.exe`, macOS uses an app bundle, and Linux uses a native executable. **No SWF, Flash Player, Java, Python, or emulator is needed to play.** The game runs its translated C++ controllers rather than loading the original SWF.
 
 This project is not affiliated with Max Games or the original game's creators. See [credits and third-party content](NOTICE.md).
 
@@ -46,19 +46,24 @@ This project is not affiliated with Max Games or the original game's creators. S
 | Original campaign pause menu | MENU, Esc, or P |
 | Persistent PC settings | Saved in `options.ini` |
 | Remaining campaign and cutscenes | Pending |
-| macOS and Linux | Pending; after Windows validation |
+| macOS and Linux | Native preview builds; platform validation in progress |
 
-CI checks the Windows source build and Python tools. Gameplay tests require locally generated assets; a green CI result does not certify the full campaign.
+Source CI checks Windows compilation and Python tools. The release workflow builds Windows x64, Linux x64, macOS Intel, and macOS Apple Silicon, and runs campaign probes using prepared release assets. Portable packages also run automated window, input, render, pause, audio, and save checks. These checks do not certify full game parity.
 
 ## Download and play
 
-**[Download the Windows development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.2)**
+**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.2)**
 
-1. Download `DeadWarrior-2-Windows-x64.zip` from the release assets.
-2. Extract the entire ZIP to a folder.
-3. Run **`DeadWarrior 2.exe`**.
+| Platform | Release asset | Start |
+| --- | --- | --- |
+| Windows x64 | `DeadWarrior-2-Windows-x64.zip` | Extract the entire ZIP and run `DeadWarrior 2.exe` |
+| macOS Apple Silicon | `DeadWarrior-2-macOS-arm64.zip` | Extract and open `DeadWarrior 2.app` |
+| macOS Intel | `DeadWarrior-2-macOS-x64.zip` | Extract and open `DeadWarrior 2.app` |
+| Linux x64 | `DeadWarrior-2-Linux-x64.tar.gz` | Extract and run `./"DeadWarrior 2"` inside its folder |
 
-Keep the included `assets` folder next to the executable. This is an unfinished campaign preview, with the six missions listed above; it is not the complete game.
+All packages include assets. Keep Linux/Windows assets beside the executable; macOS keeps them inside the app. macOS builds have an ad-hoc integrity signature, without Developer ID notarization. Linux builds target Ubuntu 22.04 or newer compatible distributions (glibc 2.35+), with desktop graphics and audio libraries.
+
+This is an unfinished campaign preview with six missions; it is not the complete game. The first macOS/Linux packages add the platform layer to the preview.2 campaign sources. Automated checks are supplemented by ongoing gameplay validation.
 
 ## Build from source
 
@@ -72,13 +77,13 @@ cd DeadWarrior-2
 & '.\out\windows-x64\DeadWarrior 2.exe'
 ```
 
-See the [build guide](docs/building.md) for details. Preparing resources from an original SWF is an **optional developer workflow**, using Python, Java, and FFDec. Those tools are not part of the game runtime. The source tree keeps generated game resources out of Git; the Windows release includes everything needed to play.
+See the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md) for details. Preparing resources from an original SWF is an **optional developer workflow**, using Python, Java, and FFDec. Those tools are not part of the game runtime. The source tree keeps generated game resources out of Git; releases include everything needed to play.
 
 ## PC controls
 
 | Key | Action |
 | --- | --- |
-| **Insert** | Open or close PC settings |
+| **Insert** (or **F10** on macOS/Linux) | Open or close PC settings |
 | **F11** | Toggle fullscreen |
 | **Arrow keys / Tab** | Navigate PC settings |
 | **Enter / Space** | Change the selected option |

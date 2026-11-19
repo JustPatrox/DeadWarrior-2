@@ -1,5 +1,7 @@
 # Building the native Windows port
 
+For native macOS and Linux packages, see the [portable build guide](portable.md).
+
 DeadWarrior 2 is a native C++ game port. **A normal C++ build does not require a SWF**, provided you use the prepared assets from the Windows release. Players can simply download and extract the ready-to-play ZIP.
 
 ## Native build prerequisites

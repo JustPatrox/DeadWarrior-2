@@ -17,7 +17,7 @@ body:
     id: system
     attributes:
       label: Environment
-      description: Windows version, GPU, resolution, display mode, FPS limit, and V-Sync setting.
+      description: OS version, CPU architecture, GPU, resolution, display mode, FPS limit, and V-Sync setting.
     validations:
       required: true
   - type: textarea

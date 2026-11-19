@@ -241,8 +241,8 @@ public:
         for(int i=0;i<200;++i) tick();require(menu_.page()==Page::Main,"Menu did not finish opening");draw(1280,720,out/"main.png");
         auto click=[&](Point p){pointer(0,p);pointer(1,p);pointer(2,p);};
         click({161,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::NewOrContinue,"Native menu input failed");
-        click({154,668});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::Difficulty,"New campaign input failed");
-        click({434,639});for(int i=0;i<100;++i) tick();require(menu_.page()==Page::Intro,"Difficulty input failed");
+        click({437,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::Difficulty,"New campaign input failed");
+        click({154,668});for(int i=0;i<100;++i) tick();require(menu_.page()==Page::Intro,"Difficulty input failed");
         click({434,639});for(int i=0;i<80;++i) tick();require(bool(battle_),"Skip intro did not open tutorial");
         for(int i=0;i<40;++i) tick();draw(1280,720,out/"tutorial.png");
         const int before=battle_->ticks();click({506,686});require(pause_.isOpen(),"HUD MENU did not open pause");
