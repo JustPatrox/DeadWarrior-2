@@ -6,11 +6,11 @@ from build_archidon_assets import table
 def build():
     c=ArtCompiler(ROOT/'assets/pc-button')
     field=c.swf.getCharacter(1102)
-    field.fontHeight=160
+    field.fontHeight=260
     field.align=2
     field.wordWrap=False
     field.bounds=c.J(FLASH+'types.RECT')(-400,400,-160,160)
-    field.initialText='<p align="center"><font face="CopprplGoth Bd BT" size="8" color="#d7d3b1" letterSpacing="0.000000" kerning="1">PC</font></p>'
+    field.initialText='<p align="center"><font face="CopprplGoth Bd BT" size="13" color="#d7d3b1" letterSpacing="0.000000" kerning="1">PC</font></p>'
     # Keep the quality button's authored up/over/down graphics and replace its
     # bitmap label with the existing embedded Copperplate text field.
     label=c.timeline(9807).getFrame(0).layers
