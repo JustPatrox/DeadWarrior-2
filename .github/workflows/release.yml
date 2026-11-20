@@ -72,7 +72,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ninja-build libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libegl1-mesa-dev libdrm-dev libgbm-dev xvfb
+          sudo apt-get install -y ninja-build libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libgl1-mesa-dev libegl1-mesa-dev libdrm-dev libgbm-dev xvfb openbox x11-utils
       - name: Configure native build
         if: runner.os != 'Windows'
         run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DDW2_RELEASE_VERSION="$RELEASE_TAG" -DDW2_BUNDLE_BUILD="${{ github.run_number }}"
@@ -90,7 +90,26 @@ jobs:
         env:
           SDL_AUDIO_DRIVER: dummy
           LIBGL_ALWAYS_SOFTWARE: '1'
-        run: xvfb-run -a 'out/package/DeadWarrior 2' --smoke-test out/checks --save-dir out/test-save
+        run: |
+          # SDL's desktop fullscreen request is handled by the window manager.
+          # A bare Xvfb server cannot exercise that transition.
+          xvfb-run -a bash <<'DESKTOP'
+          set -e
+          openbox >out/openbox.log 2>&1 &
+          wm_pid=$!
+          trap 'kill "$wm_pid" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import subprocess, time
+          for attempt in range(50):
+              state = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'], capture_output=True, text=True)
+              if state.returncode == 0 and 'window id #' in state.stdout:
+                  break
+              time.sleep(.1)
+          else:
+              raise RuntimeError('Test window manager did not become ready: ' + state.stdout + state.stderr)
+          PY
+          'out/package/DeadWarrior 2' --smoke-test out/checks --save-dir out/test-save
+          DESKTOP
       - name: Test macOS window, renderer, input, audio, pause and saves
         if: runner.os == 'macOS'
         env:
@@ -112,6 +131,7 @@ jobs:
           path: |
             out/checks/*
             out/test-save/lastest.log
+            out/openbox.log
           if-no-files-found: warn
 
   publish:
