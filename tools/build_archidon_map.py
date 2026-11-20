@@ -37,12 +37,14 @@ def build(level=3):
         right=max(897,ceil(((850+700*16/9)/2-x)/scale)+2)
         top=min(13,floor(-y/scale)-2)
         bottom=max(701,ceil((700-y)/scale)+2)
-        c.render(436,[frame],scale=1,box=(left,897,13,701))
+        # Later territories move original geography above y=13. Render that
+        # actual region instead of stretching the old crop's first scanline.
+        c.render(436,[frame],scale=1,box=(left,897,top,bottom))
         row=c.rows[-1]
         with Image.open(c.directory/row[2]) as source: image=np.array(source.convert("RGBA"))
         water=image[:,-105:]
         sea=np.tile(np.concatenate((water[:,::-1],water),axis=1),(1,ceil((right-897)/210),1))[:,:right-897]
-        image=np.pad(np.concatenate((image,sea),axis=1),((13-top,bottom-701),(0,0),(0,0)),mode="edge")
+        image=np.concatenate((image,sea),axis=1)
         image[:,:,3]=255
         Image.fromarray(image).save(c.directory/row[2])
         c.rows[-1]=(*row[:4],top,image.shape[1],image.shape[0])

@@ -52,7 +52,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 ## Download and play
 
-**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.4)**
+**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.5)**
 
 | Platform | Release asset | Start |
 | --- | --- | --- |
