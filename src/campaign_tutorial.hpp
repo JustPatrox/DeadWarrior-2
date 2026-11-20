@@ -17,8 +17,9 @@ public:
     void command(Point);
     void unitAbility(int slot=0);
     void selectArmy(bool center=false);
-    void minerOrder(bool);
-    void pcPressed(bool value) {pcPressed_=value;}
+    void pcPressed(bool value) {pcPressed_=value;if(!value) toolbarPressed_=0;}
+    void toolbarMouseDown(bool);
+    bool toolbarControlHit(const char*,Point) const;
     std::vector<Draw> drawList() const;
     std::string takeVoice();
     struct SoundEvent {std::string name; Point position{}; bool spatial{true};};
@@ -48,8 +49,10 @@ public:
         int bombers{},bomberWaves{},nextBomberWave{},explosions{},boulderShots{},boulderHits{},enslavedGiants{};
         int enemyKnights{},selectedMilitary{};
         int knightHint{-1};
+        int enemyDeads{},gutsShots{},poisonHits{},deadsHint{-1},alliedHealers{},cures{},alliedWizards{};
+        std::array<int,6> queued{};
+        Point deadFront{-1,0};
         double furthestMilitary{};
-        int poisonHits{};
     };
     BattleStatus battleStatus() const;
     struct UnitStatus {int symbol{};Point position;bool enemy{};double health{};int target{};std::string pose;int frame{},cloaked{};bool garrisoned{};};
@@ -79,6 +82,7 @@ private:
         int target{-1};
         int resource{-2},miningSlot{-1},bag{};
         int bowFrame{1};
+        int projectileTarget{-1};
         int rageCounter{200};
         int furyStacks{},lastHitTick{},lastVictim{-1},cloakTicks{},cloakCooldown{};
         std::array<int,3> spellCooldown{};
@@ -118,7 +122,20 @@ private:
     std::map<int,std::pair<int,int>> castleState_;
     int pressedCastle_{};
     bool pcPressed_{};
-    int poisonHits_{};
+    struct ToolbarPart {std::string name;int owner{},key{};Point origin;double alpha{1};bool flipY{};};
+    std::vector<ToolbarPart> toolbarParts_;
+    std::map<std::pair<int,int>,std::pair<int,int>> toolbarFrames_;
+    std::map<int,std::vector<Rect>> toolbarMasks_;
+    int toolbarPressed_{},toolbarHover_{},toolbarHoverStart_{},uiTicks_{};
+    void loadToolbar(const std::filesystem::path&);
+    int toolbarAt() const;
+    bool actionEnabled(int) const;
+    bool actionHit(int,Point) const;
+    void updateToolbarHover();
+    void drawToolbar(std::vector<Draw>&) const;
+    void drawRecruitHighlight(std::vector<Draw>&) const;
+    Draw recruitOverlay(int,Rect) const;
+    Draw toolbarPart(const ToolbarPart&,int) const;
     int selectedBuilding_{};
     struct CommandTarget {enum Kind {Move,Mine,Pray,Enemy}; Kind kind{Move}; int id{-1};};
     struct ClickMarker {Point position; int frame{1};};
@@ -189,6 +206,9 @@ private:
     int aimedSpell_{};
     bool aimedAttackMove_{};
     Unit castleDead_;
+    std::map<std::string,Animation> castleDeadAnimations_;
+    int gutsShots_{},poisonHits_{},cures_{},deadsHintTicks_{-1};
+    bool deadsHintTriggered_{};
     int giantHits_{},cinematic_{-1},cinematicTicks_{},dialogueIndex_{-1},dialogueTicks_{},medusaIndex_{-1};
     double sceneShade_{};
     struct Dialogue {std::string voice,text; int ticks{};};
@@ -221,10 +241,11 @@ private:
     int requestedMessage() const;
     void updateSelection(Point);
     void setFormation(Point world);
-    void moveFormation(const std::vector<Unit*>& group,Point world);
+    void moveFormation(const std::vector<Unit*>& group,Point world,bool keepCombat=false);
     bool hitControl(const char* name,Point p) const;
     bool defencePress(Point);
     void teamOrder(bool garrison);
+    void minerOrder(bool garrison);
     void orderArmy(bool enemy,ArmyOrder,double destination);
     Unit& combatTarget(int id);
     bool reserveOre(Unit&,int ore);
@@ -272,6 +293,9 @@ private:
     void updateBoulders();
     void drawBoulders(std::vector<std::pair<double,Draw>>&) const;
     void updateKnightController();
+    void updateDeadsController();
+    Point updateDead(Unit&);
+    void throwGuts(Unit&);
     void createMiningBlocks();
     void updateArchidon();
     Point updateArcher(Unit&);

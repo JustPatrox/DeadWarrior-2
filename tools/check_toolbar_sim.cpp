@@ -58,6 +58,22 @@ int main(int argc,char** argv) {
         Viewport::configure(Viewport::Aspect::Stretched,1024,768);Viewport stretched(1024,768);
         require(stretched.pixels.w==1024&&stretched.pixels.h==768,"Stretched mode leaves bars");
         Viewport::configure(Viewport::Aspect::Fixed,1280,720);
+        auto drawn=[&](int symbol,int frame){const auto list=game.drawList();return std::any_of(list.begin(),list.end(),[&](const Draw& d){return d.symbol==symbol&&d.frame==frame;});};
+        game.point(Point{506,683.5});require(drawn(10084,71001),"Original MENU hover state missing");
+        game.toolbarMouseDown(true);require(drawn(10084,72001),"Original MENU pressed state missing");
+        game.point(Point{425,550});require(drawn(10084,70001),"Dragging outside MENU retained its pressed state");
+        game.point(Point{506,683.5});require(drawn(10084,72001),"Dragging back into the held button lost its pressed state");
+        game.toolbarMouseDown(false);require(drawn(10084,71001),"Release did not restore MENU hover");
+        game.selectArmy();game.point(Point{813,642});require(drawn(10009,71001),"Original action hover pulse missing");
+        for(int i=0;i<10;++i) game.tick();require(drawn(10009,71011),"Original action pulse did not advance at 30 Hz");
+        game.toolbarMouseDown(true);require(drawn(10009,72001),"Original action pressed state missing");
+        game.tick();game.tick();game.toolbarMouseDown(false);
+        require(drawn(10009,71001),"Release did not restart the original hover timeline");
+        game.release({});require(drawn(10009,70001),"Cancelled action press remained visible");
+        click({554,582});game.point(Point{813,642});const int simulationBefore=game.ticks();
+        for(int i=0;i<5;++i) game.tick();
+        require(game.ticks()==simulationBefore+10&&drawn(10009,71006),"Fast-forward changed the toolbar animation rate");
+        game.point(Point{30,610});require(drawn(10109,74001),"Original recruitment building highlight missing");
         std::cout<<"Toolbar, fog, castle hover, miner orders, inherited attack and aspect transforms passed\n";return 0;
     } catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

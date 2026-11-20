@@ -58,7 +58,9 @@ Point CampaignTutorial::updateEnslavedGiant(Unit& u) {
             }
             return {};
         }
-        if (!attacking && !u.hold) return {(target.position.x-u.position.x)/100,(target.position.y-u.position.y)/100};
+        // EnslavedGiantAi resumes its commanded formation when the target is
+        // outside throwing range; it does not pursue that target instead.
+        if (!attacking && !u.stunned && !u.hold) return {(u.goal.x-u.position.x)/100,(u.goal.y-u.position.y)/100};
     }
     if (!attacking && !u.stunned && !u.hold && u.order==Order::Move)
         return {(u.goal.x-u.position.x)/100,(u.goal.y-u.position.y)/100};

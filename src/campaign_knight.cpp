@@ -15,7 +15,6 @@ void CampaignTutorial::selectArmy(bool center) {
         unit.selected=!unit.enemy && unit.hp>0 && !isWorker(unit.symbol) && !unit.garrisoned;
     if (center && frontLine()>0) targetCamera_=frontLine()-legacyWidth/2;
 }
-
 void CampaignTutorial::minerOrder(bool garrison) {
     if (ended() || cinematic_>=0 || step_<Step::Commands) return;
     std::vector<Unit*> workers;

@@ -166,7 +166,7 @@ void CampaignTutorial::updateCastleDead() {
         animate(u,"attack_1"); u.target=target; u.hit=false; u.lastHitTick=ticks_;
     }
     if (u.pose=="attack_1" && u.frame==31 && !u.hit) {
-        const auto& pose=animations_.at({dead,u.pose}); const double size=scale(u);
+        const auto& pose=castleDeadAnimations_.at(u.pose); const double size=scale(u);
         Flight shot; shot.enemy=true; shot.castle=false; shot.guts=true;
         shot.x=u.position.x-pose.origin.x*size; shot.depth=u.position.y; shot.z=z+pose.origin.y*size;
         shot.dx=-speed*std::cos(u.bowAngle*radians); shot.dz=speed*std::sin(u.bowAngle*radians);
@@ -176,12 +176,12 @@ void CampaignTutorial::updateCastleDead() {
         shot.poison=stat(dead,"castlePoison"); shot.angle=soundSequence_++%360; shot.spin=int(soundSequence_++%4)-2;
         flights_.push_back(shot); ++enemyCastleShots_; u.hit=true;
     }
-    if (++u.frame>=animations_.at({dead,u.pose}).length) {animate(u,"stand"); u.frame=1;}
+    if (++u.frame>=castleDeadAnimations_.at(u.pose).length) {animate(u,"stand"); u.frame=1;}
 }
 
 void CampaignTutorial::drawCastleDead(std::vector<std::pair<double,Draw>>& layers) const {
     const auto& u=castleDead_; const double size=scale(u);
-    const auto& pose=animations_.at({dead,u.pose});
+    const auto& pose=castleDeadAnimations_.at(u.pose);
     const double perspective=rules_.at("backScale")+u.position.y/depth_*(rules_.at("frontScale")-rules_.at("backScale"));
     auto image=sprite(pose.symbol,u.frame,{u.position.x-camera_-pose.origin.x*size,
         battlefieldY_+u.position.y-u.altitude*perspective+pose.origin.y*size},size,true);

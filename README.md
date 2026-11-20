@@ -33,11 +33,11 @@ This project is not affiliated with Max Games or the original game's creators. S
 
 ## Current status
 
-**Development build: the full campaign has not been ported yet.** Eight missions are accessible, through The Night is Dark (Juggerknights). Unimplemented sections display a work-in-progress screen with restart and quit options.
+**Development build: the full campaign has not been ported yet.** Nine missions are accessible, through Undead War (Deadly Deads). Unimplemented sections display a work-in-progress screen with restart and quit options.
 
 | Feature | Status |
 | --- | --- |
-| Menus, tutorial, and first eight missions | Implemented; full parity is still under review |
+| Menus, tutorial, and first nine missions | Implemented; full parity is still under review |
 | Campaign progress, upgrades, and saves | Implemented for the current content |
 | 16:9 rendering, audio, and contextual cursors | Implemented |
 | Windowed, borderless window, and fullscreen modes | Insert on Windows/Linux; Option on macOS |
@@ -45,6 +45,7 @@ This project is not affiliated with Max Games or the original game's creators. S
 | V-Sync, FPS counter, render resolution, and cursor lock | Available |
 | Aspect modes | 16:9 default, Stretched, Dynamic [Experimental] |
 | Castle hover, tooltips, and PC toolbar button | Original artwork, font, hit areas, and animation states |
+| Original toolbar hover and pressed states | Implemented, including action-slot glow |
 | Original campaign pause menu | MENU, Esc, or P |
 | Persistent PC settings | Saved in `options.ini` |
 | Remaining campaign and cutscenes | Pending |
@@ -54,7 +55,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 ## Download and play
 
-**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.6)**
+**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.7)**
 
 | Platform | Release asset | Start |
 | --- | --- | --- |
@@ -65,7 +66,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 All packages include assets. Keep Linux/Windows assets beside the executable; macOS keeps them inside the app. macOS builds have an ad-hoc integrity signature, without Developer ID notarization. Linux builds target Ubuntu 22.04 or newer compatible distributions (glibc 2.35+), with desktop graphics and audio libraries.
 
-This is an unfinished campaign preview with eight missions; it is not the complete game. All four native packages use the same campaign sources and prepared content. Automated checks are supplemented by ongoing gameplay validation.
+This is an unfinished campaign preview with nine missions; it is not the complete game. All four native packages use the same campaign sources and prepared content. Automated checks are supplemented by ongoing gameplay validation.
 
 ## Build from source
 
@@ -92,7 +93,7 @@ See the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md
 | **Esc** | Close PC settings or pause/resume the battle |
 | **P** | Pause/resume the battle |
 
-The original **PC** toolbar button also opens settings. Use **Insert → Show FPS → On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. Cursor lock confines the pointer during an active battle and releases it for pause, settings, focus loss, and minimization. **Stretched** fills the display; **Dynamic [Experimental]** expands the logical camera and adapts the HUD, terrain, fog, and minimap. The default remains **16:9**. Borderless covers the full monitor. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
+The larger **PC** label keeps the original font and button artwork. The original **PC** toolbar button also opens settings. Use **Insert → Show FPS → On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. Cursor lock confines the pointer during an active battle and releases it for pause, settings, focus loss, and minimization. **Stretched** fills the display; **Dynamic [Experimental]** expands the logical camera and adapts the HUD, terrain, fog, and minimap. The default remains **16:9**. Borderless covers the full monitor. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
 
 See the [preview.6 fixes and validation](docs/todo-checkpoint.md) for the completed TODO items and test scope.
 

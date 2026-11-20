@@ -48,8 +48,8 @@ package {
                 var app:Object=DisplayObjectContainer(root).getChildAt(0);
                 if(!("currentScreen" in app)) return;
                 var request:int=socket.bytesAvailable ? socket.readUnsignedByte() : 0;
-                if((request>=66 && request<=70) || request==72 || request==74) {
-                    app.campaign.currentLevel=request==74 ? 7 : request==72 ? 6 : request-65;
+                if((request>=66 && request<=70) || request==72 || request==74 || request==76) {
+                    app.campaign.currentLevel=request==76 ? 8 : request==74 ? 7 : request==72 ? 6 : request-65;
                     app.campaign.campaignPoints=app.campaign.currentLevel;
                     app.campaign.difficultyLevel=1;
                     app.showScreen("campaignGameScreen");
@@ -88,10 +88,26 @@ package {
                         gs.team.population+=forwardActor.population;
                         app.stickWar.screenX=app.stickWar.targetScreenX=3000;
                     }
+                    // Prepared position, target and 1000 mana isolate the mobile
+                    // Dead's original AI/projectile; this is not a balance test.
+                    if(request==77 && app.campaign.currentLevel==8) {
+                        for each(var mobileDead:Object in gs.team.enemyTeam.units) {
+                            if(mobileDead.type!=10) continue;
+                            mobileDead.px=3000;mobileDead.py=gs.game.map.height/2;
+                            var poisonTarget:Object=gs.game.unitFactory.getUnit(8);
+                            gs.team.spawn(poisonTarget,gs.game);
+                            poisonTarget.px=mobileDead.px-500;poisonTarget.py=mobileDead.py;
+                            gs.team.population+=poisonTarget.population;gs.team.attack(true);
+                            gs.team.enemyTeam.mana=1000;
+                            app.stickWar.screenX=app.stickWar.targetScreenX=mobileDead.px-650;
+                            break;
+                        }
+                    }
                     camera=int(app.stickWar.screenX);
                     frame=app.stickWar.frame;
                     selected=gs.userInterface.selectedUnits.selected.length;
-                    details=gs.team.gold+","+gs.team.mana+","+gs.team.population+","+gs.team.statue.health+","+gs.team.enemyTeam.statue.health;
+                    details=gs.team.gold+","+gs.team.mana+","+gs.team.population+","+gs.team.statue.health+","+gs.team.enemyTeam.statue.health+
+                            ","+gs.team.enemyTeam.gold+","+gs.team.enemyTeam.mana+","+int(gs.team.enemyTeam.tech.isResearched(-45))+","+int(gs.doAiUpdates);
                     if(request==83) {
                         for each(var team:Object in [gs.team,gs.team.enemyTeam]) {
                             var monument:Object=team.statue;
@@ -103,7 +119,9 @@ package {
                                 var animationFrame:int=("mc" in body && body.mc!=null) ? body.mc.currentFrame : 0;
                                 actors+=team.id+","+unit.type+","+int(unit.px)+","+int(unit.py)+","+int(unit.health)+
                                         ","+unit.pwidth+","+unit.pheight+","+animationFrame+","+
-                                        int("bowAngle" in unit ? unit.bowAngle : 0)+","+pose+";";
+                                        int("bowAngle" in unit ? unit.bowAngle : 0)+","+pose+","+int(unit.isPoisoned())+
+                                        ","+int("isPoisonedToggled" in unit && unit.isPoisonedToggled)+
+                                        ","+(unit.ai.currentTarget==null ? -1 : unit.ai.currentTarget.type)+";";
                             }
                         }
                     }

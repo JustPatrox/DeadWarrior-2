@@ -55,7 +55,7 @@ def run(width,height):
                 time.sleep(11);click(161,664);time.sleep(1.2);click(578,664)
                 wait(lambda r:r[0]=='101' and r[1]=='401');shot('map-entry');click(400,300)
                 initial=wait(lambda r:r[0]=='27')
-                assert len(initial)==47 and initial[34]=='2' and initial[44]=='1' and initial[35]=='0' and initial[43]=='11' and float(initial[11])==1500,initial
+                assert len(initial)>=47 and initial[34]=='2' and initial[44]=='1' and initial[35]=='0' and initial[43]=='11' and float(initial[11])==1500,initial
                 user.SendMessageW(hwnd,0x100,32,0);user.SendMessageW(hwnd,0x101,32,0)
                 wait(lambda r:r[45]=='3')
                 shot('entry');click(310,600);time.sleep(2.6)

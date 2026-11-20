@@ -105,3 +105,8 @@ The Desert sky keeps its single original moon. Native rendering extends the flat
 - Original `toolBoxMc`1119, embedded Copperplate font, XML text/stat fields, and icon symbols are exported by `build_tooltip_assets.py`. `campaign_interaction.cpp` preserves original four-update unit/action delays, 24-update army-order delays, and HUD layering.
 - The requested PC label uses original quality-button10102 and its embedded font via `build_pc_button_assets.py`, at its native 48x17 texture size. This is the requested addition to the original HUD.
 - `toolbar_probe` checks fog filtering, selection recovery, miner-only controls, inherited attack, tooltip timing/layering, and aspect transforms. `blend_probe` checks 48 pixel samples obtained from the original player.
+
+
+Toolbar button states are exported by `build_toolbar_assets.py` from original HUD10118, SimpleButtons9977/9984/9991/10067/10077/10084, and the three-state action slots. `campaign_toolbar.cpp` applies those states and hit masks. Original recruitment overlays retain their 154/256 instance alpha and lower-row vertical reflection. The PC label change is explicit user-requested typography; its original artwork/font remain unchanged.
+
+`CampaignDeads.as` and mobile `Dead.as` map to `campaign_deads.cpp`, with separate Default mobile and Wrapped Helmet castle animation banks. Prepared original-player tests are distinguished from native campaign victories; see `deads-checkpoint.md`.

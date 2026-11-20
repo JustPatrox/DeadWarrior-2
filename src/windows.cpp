@@ -224,7 +224,7 @@ class Window {
         pause_.setOpen(open); pauseButtonDown_=false;
         mouse_={-1,-1};
         if (GetCapture()==hwnd_) ReleaseCapture();
-        if (tutorial_) {tutorial_->pcPressed(false);tutorial_->release({}); tutorial_->point({});}
+        if (tutorial_) {tutorial_->release({}); tutorial_->point({});}
         SetCursor(LoadCursorW(nullptr,IDC_ARROW));
         soundPlayer_.setPaused(tutorial_ && (open || display_.isOpen()));
         gameDeadline_=Clock::now()+gameInterval;
@@ -309,6 +309,7 @@ class Window {
             if (progress_.level>=5 && !assets_.art.contains({6465,1})) assets_.loadTextures(directory_.parent_path()/"giants");
             if (progress_.level>=6 && !assets_.art.contains({8771,1})) assets_.loadTextures(directory_.parent_path()/"bomber");
             if (progress_.level>=7 && !assets_.art.contains({4932,1})) assets_.loadTextures(directory_.parent_path()/"knight");
+            if (progress_.level>=8 && !assets_.art.contains({8262,10001})) assets_.loadTextures(directory_.parent_path()/"deads");
             tutorial_=std::make_unique<CampaignTutorial>(assets_,directory_.parent_path(),progress_);
         }
         intermission_.reset();
@@ -459,7 +460,11 @@ class Window {
                                   <<'\t'<<battle.bombers<<'\t'<<battle.bomberWaves<<'\t'<<battle.nextBomberWave
                                   <<'\t'<<battle.explosions<<'\t'<<battle.boulderShots<<'\t'<<battle.boulderHits<<'\t'<<battle.enslavedGiants
                                   <<'\t'<<battle.miners<<'\t'<<battle.archers<<'\t'<<battle.population
-                                  <<'\t'<<battle.enemyKnights<<'\t'<<battle.selectedMilitary<<'\t'<<battle.knightHint<<std::endl;
+                                  <<'\t'<<battle.enemyKnights<<'\t'<<battle.selectedMilitary<<'\t'<<battle.knightHint
+                                  <<'\t'<<battle.enemyDeads<<'\t'<<battle.gutsShots<<'\t'<<battle.poisonHits<<'\t'<<battle.deadsHint
+                                  <<'\t'<<battle.alliedHealers<<'\t'<<battle.cures<<'\t'<<battle.alliedWizards;
+                    for(int count:battle.queued) tutorialTrace_<<'\t'<<count;
+                    tutorialTrace_<<'\t'<<battle.deadFront.x<<'\t'<<battle.deadFront.y<<'\t'<<battle.mana<<'\t'<<battle.fighters<<std::endl;
                 }
                 auto voice=tutorial_->takeVoice();
                 if (!voice.empty()) {
@@ -745,6 +750,9 @@ class Window {
             if (tutorial_) {
                 RECT r{}; GetClientRect(hwnd_,&r);
                 auto stage=Viewport::battlePoint(Viewport(r.right,r.bottom).toStage(mouse_));
+                tutorial_->point(stage);
+                if(msg==WM_LBUTTONDOWN) tutorial_->toolbarMouseDown(true);
+                if(msg==WM_LBUTTONUP) tutorial_->toolbarMouseDown(false);
                 const Rect pcButton{320,674,48,22};
                 if(!tutorial_->ended() && msg==WM_LBUTTONDOWN && stage && pcButton.contains(*stage)) {
                     pcButtonDown_=true;tutorial_->pcPressed(true);SetCapture(hwnd_);return 0;
@@ -752,16 +760,14 @@ class Window {
                 if(msg==WM_LBUTTONUP && pcButtonDown_) {
                     pcButtonDown_=false;tutorial_->pcPressed(false);ReleaseCapture();if(stage && pcButton.contains(*stage)) showDisplay(true);return 0;
                 }
-                const Rect pauseButton{482,674,50,22};
-                if (!tutorial_->ended() && msg==WM_LBUTTONDOWN && stage && pauseButton.contains(*stage)) {
+                if (!tutorial_->ended() && msg==WM_LBUTTONDOWN && stage && tutorial_->toolbarControlHit("menuButton",*stage)) {
                     pauseButtonDown_=true; SetCapture(hwnd_); return 0;
                 }
                 if (msg==WM_LBUTTONUP && pauseButtonDown_) {
                     pauseButtonDown_=false; ReleaseCapture();
-                    if (stage && pauseButton.contains(*stage)) showPause(true);
+                    if (stage && tutorial_->toolbarControlHit("menuButton",*stage)) showPause(true);
                     return 0;
                 }
-                tutorial_->point(stage);
                 refreshPointer();
                 if (InSendMessageEx(nullptr)==ISMEX_NOSEND)
                     SetCursor(tutorial_->cursorSymbol() ? nullptr : LoadCursorW(nullptr,IDC_ARROW));

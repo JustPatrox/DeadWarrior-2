@@ -79,7 +79,7 @@ bool CampaignTutorial::updateCaster(Unit& u) {
         if (u.spell==4 || u.spell==5) {
             auto& target=units_.at(u.spellTarget);
             if (target.hp>0) {
-                if (u.spell==5) target.poison=0;
+                if (u.spell==5) {target.poison=0;++cures_;}
                 else {
                     target.healTicks=int(stat(u,"heal.duration"));
                     target.healAmount=stat(u,"heal.amount");

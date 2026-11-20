@@ -33,8 +33,8 @@ int CampaignTutorial::tooltipAt() const {
     if(hitControl("garrisonButton",*cursor_)) return -10;
     if(hitControl("defendButton",*cursor_)) return -11;
     if(hitControl("attackButton",*cursor_)) return -12;
-    if(Rect{309,648,94,25}.contains(*cursor_)) return -13;
-    if(Rect{444,648,94,25}.contains(*cursor_)) return -14;
+    if(toolbarControlHit("leftMinerButton",*cursor_)) return -13;
+    if(toolbarControlHit("rightMinerButton",*cursor_)) return -14;
     const auto selected=std::find_if(units_.begin(),units_.end(),[](const Unit& u){return u.selected && !u.enemy && u.hp>0;});
     if(selected!=units_.end() && !rangeSelected_) {
         for(auto [symbol,key,at]:{std::tuple{2311,-20,Point{813,642}},std::tuple{6458,-21,Point{744,679.5}},

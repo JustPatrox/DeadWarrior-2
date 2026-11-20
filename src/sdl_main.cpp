@@ -121,7 +121,7 @@ public:
         :window_(window),root_(std::move(root)),assetsDir_(root_/"assets"),saveDir_(std::move(saves)),
          log_(saveDir_/"lastest.log",std::ios::trunc),art_(assetsDir_/"menu"),menu_(art_),renderer_(window,art_,root_),
          audio_(assetsDir_/"audio",[this](std::string text){log(text);}),display_(window,renderer_.native(),saveDir_/"options.ini"),pause_(art_) {
-        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","knight","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
+        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","knight","deads","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
         loadSave();menu_.restart(saved_.has_value());
         if(auto icon=SDL_LoadPNG((root_/"icon.png").string().c_str())) {SDL_SetWindowIcon(window_,icon);SDL_DestroySurface(icon);}
         log(std::string("START platform=")+SDL_GetPlatform()+" renderer="+SDL_GetRendererName(renderer_.native()));
@@ -137,13 +137,14 @@ public:
         if(campaign_) {campaign_->point(p);if(action==1) campaign_->press();if(action==2) {campaign_->release();campaignEvents();}return;}
         if(battle_) {
             p=Viewport::battlePoint(p);
+            battle_->point(p);
+            if(action==1) battle_->toolbarMouseDown(true);
+            if(action==2) battle_->toolbarMouseDown(false);
             const Rect pc{320,674,48,22};
             if(action==1 && p && !battle_->ended() && pc.contains(*p)) {pcButton_=true;battle_->pcPressed(true);return;}
             if(action==2 && pcButton_) {pcButton_=false;battle_->pcPressed(false);if(p&&pc.contains(*p)) toggleSettings();return;}
-            const Rect button{482,674,50,22};
-            if(action==1&&p&&!battle_->ended()&&button.contains(*p)) {pauseButton_=true;return;}
-            if(action==2&&pauseButton_) {pauseButton_=false;if(p&&button.contains(*p)) paused(true);return;}
-            battle_->point(p);
+            if(action==1&&p&&!battle_->ended()&&battle_->toolbarControlHit("menuButton",*p)) {pauseButton_=true;return;}
+            if(action==2&&pauseButton_) {pauseButton_=false;if(p&&battle_->toolbarControlHit("menuButton",*p)) paused(true);return;}
             if(p&&action==1) {battle_->press(*p);const auto missing=battle_->takeUnavailableControl();if(!missing.empty()) unsupported(missing);}
             if(p&&action==3) battle_->command(*p);
             if(action==2) {
@@ -324,6 +325,11 @@ public:
             if(level==7) {
                 key(SDLK_SPACE);keyRelease(SDLK_SPACE);
                 require(battle_->battleStatus().selectedMilitary==3,"SPACE did not select the three starting soldiers");
+                pointer(0,Point{813,642});
+                auto hover=battle_->drawList();require(std::any_of(hover.begin(),hover.end(),[](const Draw& d){return d.symbol==10009&&d.frame==71001;}),"Original action hover state failed");
+                pointer(1,Point{813,642});auto pressed=battle_->drawList();
+                require(std::any_of(pressed.begin(),pressed.end(),[](const Draw& d){return d.symbol==10009&&d.frame==72001;}),"Original action pressed state failed");
+                pointer(2,Point{813,642});
             }
             draw(1280,720,out/("mission-"+std::to_string(level+1)+"-720.png"));draw(1920,1080,out/("mission-"+std::to_string(level+1)+"-1080.png"));
         }
@@ -332,7 +338,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true}\n";
         log("SELF-TEST passed");
     }
 };

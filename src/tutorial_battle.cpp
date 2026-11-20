@@ -56,6 +56,12 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
         if (u.enemy && u.symbol==bomber) ++status.bombers;
         if (!u.enemy && u.symbol==enslavedGiant) ++status.enslavedGiants;
         if (u.enemy && u.symbol==knight) ++status.enemyKnights;
+        if (u.enemy && u.symbol==dead) {
+            ++status.enemyDeads;
+            if(status.deadFront.x<0 || u.position.x<status.deadFront.x) status.deadFront=u.position;
+        }
+        if (!u.enemy && u.symbol==healer) ++status.alliedHealers;
+        if (!u.enemy && u.symbol==wizard) ++status.alliedWizards;
         if (!u.enemy && !isWorker(u.symbol) && u.selected) ++status.selectedMilitary;
     }
     status.mobileShots=mobileShots_; status.towerControl=towerControl_;
@@ -65,7 +71,8 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
     status.bomberWaves=bomberWaves_;status.nextBomberWave=nextBomberWave_;status.explosions=explosions_;
     status.boulderShots=boulderShots_;status.boulderHits=boulderHits_;
     status.knightHint=knightHintTicks_;
-    status.poisonHits=poisonHits_;
+    status.gutsShots=gutsShots_;status.poisonHits=poisonHits_;status.deadsHint=deadsHintTicks_;status.cures=cures_;
+    for (int building=0;building<int(status.queued.size());++building) status.queued[building]=int(production_[0][building].units.size());
     return status;
 }
 std::vector<CampaignTutorial::UnitStatus> CampaignTutorial::unitStatus() const {
@@ -158,8 +165,12 @@ void CampaignTutorial::drawProduction(std::vector<Draw>& out) const {
         out.push_back(std::move(button));
         const auto& q=production_[0][slot.building];
         const auto count=std::count_if(q.units.begin(),q.units.end(),[&](const Training& t){return t.symbol==slot.type;});
+        const auto cross=art_.texture(1874).bounds;
+        const Rect cancel=sprite(1874,1,{rect.x+rect.w-cross.w,rect.y}).target;
+        const bool hover=cursor_ && rect.contains(*cursor_) && !(count && cancel.contains(*cursor_));
+        if(!toolbarParts_.empty() && !hover) out.push_back(recruitOverlay(slot.type,rect));
         if (!count) continue;
-        if (q.units.front().symbol==slot.type)
+        if (q.units.front().symbol==slot.type && (toolbarParts_.empty() || !hover))
             out.push_back(timerOverlay({rect.x,rect.y-1,rect.w,rect.h+1},q.elapsed/stat(slot.type,"cooldown")));
         out.push_back(Draw::label({rect.x+25,rect.y+15,25,25},std::to_string(count),20,0xffffff));
         out.push_back(sprite(1874,1,{rect.x+rect.w-art_.texture(1874).bounds.w,rect.y}));
@@ -226,13 +237,12 @@ void CampaignTutorial::orderArmy(bool enemy,ArmyOrder order,double destination) 
             }
         }
         u.engageOnMove=!u.garrisoned && (order==ArmyOrder::Attack || dir*(u.position.x-destination)<=0);
-        if (enemy && u.engageOnMove && u.order==Order::Attack && combatTarget(u.target).hp>0) continue;
         formation.push_back(&u);
     }
     std::stable_sort(formation.begin(),formation.end(),[](auto* a,auto* b){
         return !isWorker(a->symbol) && isWorker(b->symbol);
     });
-    moveFormation(formation,{destination,depth_/2});
+    moveFormation(formation,{destination,depth_/2},order!=ArmyOrder::Garrison);
 }
 
 void CampaignTutorial::updateOpponent() {
@@ -374,6 +384,7 @@ void CampaignTutorial::updateBattle(bool strategy) {
     if (strategy) updateOpponent();
     if (strategy && mission_==6) updateBomberController();
     if (strategy && mission_==7) updateKnightController();
+    if (strategy && mission_==8) updateDeadsController();
     for (auto& u:units_) {
         if (!u.canFight || (!u.engageOnMove && u.order!=Order::Stand) || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
         const auto& statue=statues_[!u.enemy];

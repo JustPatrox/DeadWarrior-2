@@ -10,7 +10,7 @@ struct LevelRecord {
 
 struct CampaignProgress {
     static constexpr int levelCount=14,upgradeCount=20;
-    static constexpr int playableLevelCount=8;
+    static constexpr int playableLevelCount=9;
     int level{},points{};
     Difficulty difficulty{Difficulty::Normal};
     bool autoSave{};

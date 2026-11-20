@@ -45,6 +45,7 @@ CampaignTutorial::CampaignTutorial(const MenuAssets& art,const std::filesystem::
         if(fields>>symbol>>tooltip.frame>>tooltip.delay) tooltips_[symbol]=tooltip;
     }
     std::ifstream castle(dir.parent_path()/"interface"/"castle.tsv");
+    loadToolbar(dir.parent_path()/"toolbar");
     CastlePart part;
     while(castle>>part.symbol>>part.origin.x>>part.origin.y>>part.hit.x>>part.hit.y>>part.hit.w>>part.hit.h)
         castleParts_.push_back(part);
@@ -129,6 +130,10 @@ int CampaignTutorial::spawn(int symbol,Point p,bool enemy) {
     return int(units_.size())-1;
 }
 double CampaignTutorial::stat(const Unit& u,const char* name) const {
+    if (!u.enemy && u.symbol==miner && upgrades_[5]) {
+        if (std::string_view(name)=="health") return stat(miner,"upgradedHealth");
+        if (std::string_view(name)=="maxVelocity") return stat(miner,"upgradedMaxVelocity");
+    }
     return stat(u.symbol,name);
 }
 double CampaignTutorial::stat(int symbol,const char* name) const {
@@ -200,7 +205,10 @@ Point CampaignTutorial::workMiner(Unit& u) {
 }
 void CampaignTutorial::updateUnit(Unit& u) {
     ++u.rageCounter;
-    if (u.garrisoned && (u.enemy ? u.position.x>=length_-legacyWidth : u.position.x<=legacyWidth)) u.poison=0;
+    const double home=u.enemy ? length_-legacyWidth : legacyWidth;
+    if (u.hp>0 && (u.position.x-home)*(u.enemy ? -1 : 1)<-25) {
+        u.poison=0;u.hp=std::min(u.maxHp,u.hp+rules_.at("garrisonHealRate"));
+    }
     if (u.poison>0 && ticks_%90==0) applyMagicDamage(u,u.poison,!u.enemy);
     if (u.hp>0 && u.healTicks>0) {u.hp=std::min(u.maxHp,u.hp+u.healAmount); --u.healTicks;}
     if (u.cloakTicks>0) --u.cloakTicks;
@@ -233,6 +241,8 @@ void CampaignTutorial::updateUnit(Unit& u) {
         // The cast animation advances below and retains its authored event frame.
     } else if (u.symbol==archer) {
         force=updateArcher(u);
+    } else if (u.symbol==dead) {
+        force=updateDead(u);attacking=u.pose.starts_with("attack_");
     } else if (u.symbol==enslavedGiant) {
         force=updateEnslavedGiant(u);attacking=u.pose.starts_with("attack_");
     } else if (u.canFight && u.order==Order::Attack && !attacking && !u.stunned) {
@@ -279,6 +289,9 @@ void CampaignTutorial::updateUnit(Unit& u) {
         else if (u.symbol==enslavedGiant) {
             if (u.frame==1) sound("BoulderThrowSound",u.position);
             if (u.frame==33 && !u.hit) {throwBoulder(u);u.hit=true;}
+        }
+        else if (u.symbol==dead) {
+            if (u.frame==31 && !u.hit) {throwGuts(u);u.hit=true;}
         }
         else if (!u.hit && marker!=tips_.end()) {
             auto& target=combatTarget(u.target);
@@ -348,7 +361,7 @@ void CampaignTutorial::setFormation(Point p) {
     }
     moveFormation(selected,p);
 }
-void CampaignTutorial::moveFormation(const std::vector<Unit*>& selected,Point p) {
+void CampaignTutorial::moveFormation(const std::vector<Unit*>& selected,Point p,bool keepCombat) {
     const int count=int(selected.size());
     for (int i=0;i<count;++i) {
         auto& u=*selected[i];
@@ -362,17 +375,23 @@ void CampaignTutorial::moveFormation(const std::vector<Unit*>& selected,Point p)
         const bool castle=x<legacyWidth || x>length_-legacyWidth || u.position.x<legacyWidth || u.position.x>length_-legacyWidth;
         const double available=castle ? depth_/3 : depth_,top=(depth_-available)/2;
         u.goal={x,count==1 ? std::clamp(y,top,top+available) : top+(row+.5)*available/rows};
+        // UnitAi.setCommand preserves an existing attack when replacing an
+        // ATTACK_MOVE with another ATTACK_MOVE. Keep the new formation goal.
+        if (keepCombat && (u.spell || (u.engageOnMove && u.order==Order::Attack &&
+            u.target!=-1 && combatTarget(u.target).hp>0))) {u.hold=false;continue;}
         u.order=Order::Move; u.target=-1; u.hold=false;
         if (u.pose.starts_with("attack_")) animate(u,"run");
     }
 }
 void CampaignTutorial::point(std::optional<Point> p) {
     cursor_=p;
+    updateToolbarHover();
     if (mapDown_ && p && minimap.contains(*p))
         targetCamera_=(p->x-minimap.x)/minimap.w*length_-legacyWidth/2;
     if (dragStart_ && p && p->y<575) updateSelection(*p);
 }
 void CampaignTutorial::press(Point p) {
+    point(p);toolbarMouseDown(true);
     cursor_=p;
     if (step_>=Step::Victory) {
         pressedResult_=resultHit(p);
@@ -416,19 +435,19 @@ void CampaignTutorial::press(Point p) {
     }
     if (defencePress(p)) return;
     const bool unitSelected=std::any_of(units_.begin(),units_.end(),[](const Unit& u){return u.selected && !u.enemy && u.hp>0;});
-    if (unitSelected && sprite(2311,1,{813,642}).target.contains(p)) {
+    if (unitSelected && actionHit(6,p)) {
         aimedSpell_=0; aimedAttackMove_=true; return;
     }
-    if (unitSelected && (sprite(6457,1,{813,678}).target.contains(p) || sprite(6458,1,{744,679.5}).target.contains(p))) {
+    if (unitSelected && (actionHit(9,p) || actionHit(8,p))) {
         aimedAttackMove_=false; aimedSpell_=0;
-        const bool hold=sprite(6457,1,{813,678}).target.contains(p);
+        const bool hold=actionHit(9,p);
         for (auto& u:units_) if (u.selected && !u.enemy && u.hp>0) {
             u.order=Order::Stand; u.engageOnMove=true; u.hold=hold; u.velocity={}; u.goal=u.position;
         }
         sound(hold ? "CommandHoldSound" : "CommandStopSound",{},false);
         return;
     }
-    if (unitSelected && sprite(8808,1,{675,678}).target.contains(p)) {
+    if (unitSelected && actionHit(7,p)) {
         aimedAttackMove_=false; aimedSpell_=0;
         std::vector<Unit*> group;
         bool garrison=false;
@@ -453,19 +472,18 @@ void CampaignTutorial::press(Point p) {
     mapDown_=minimap.contains(p);
     if (mapDown_) { point(p); return; }
     if (productionPress(p)) return;
-    if (Rect{309,648,94,25}.contains(p)) {minerOrder(true);return;}
-    if (Rect{444,648,94,25}.contains(p)) {minerOrder(false);return;}
+    if (toolbarControlHit("leftMinerButton",p)) {minerOrder(true);return;}
+    if (toolbarControlHit("rightMinerButton",p)) {minerOrder(false);return;}
     if (p.y>=575) {
         if (Rect{482,674,50,22}.contains(p)) unavailableControl_="HUD.menuButton symbol=10084";
         else if (Rect{320,674,48,22}.contains(p)) unavailableControl_="HUD.highButton symbol=10102";
-        else if (Rect{309,648,94,25}.contains(p)) unavailableControl_="HUD.leftMinerButton symbol=10067";
-        else if (Rect{444,648,94,25}.contains(p)) unavailableControl_="HUD.rightMinerButton symbol=10077";
         else if (rangeSelected_ && Rect{643,626,64,70}.contains(p)) unavailableControl_="HUD.CastleArcher additional research";
         return;
     }
     dragStart_=p; updateSelection(p);
 }
 void CampaignTutorial::release(std::optional<Point> p) {
+    toolbarMouseDown(false);
     if (cinematic_>=0 && !ended()) return;
     if (p && pressedCard_ && cardHit(*p)) {
         if (won()) closingCard_=true;
@@ -539,6 +557,7 @@ std::string CampaignTutorial::takeVoice() { return std::exchange(nextVoice_,{});
 std::string CampaignTutorial::takeUnavailableControl() {return std::exchange(unavailableControl_,{});}
 void CampaignTutorial::tick() {
     ++ticks_;
+    ++uiTicks_;updateToolbarHover();
     for(const auto& part:castleParts_) {
         const bool hover=cursor_ && castleHit(part,{cursor_->x+camera_,cursor_->y});
         const int state=hover ? (pressedCastle_==part.symbol ? 3 : 2) : 1;
@@ -687,7 +706,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         const auto& statue=statues_[mirror];
         if (statue.hp<=0 && step_>=Step::Victory) {
             const int frame=std::clamp(counter_+1,1,89)+(!mirror && ownStatueFrame_==8 ? 356 :
-                mirror && enemyStatueFrame_!=1 ? (enemyStatueFrame_==11 ? 445 : mission_==3 ? 267 : mission_ ? 178 : 89) : 0);
+                mirror && enemyStatueFrame_!=1 ? (enemyStatueFrame_==3 ? 712 : enemyStatueFrame_==11 ? 445 : mission_==3 ? 267 : mission_ ? 178 : 89) : 0);
             layers.emplace_back(depth_/2,sprite(1922,frame,{statueX,statueY},size,mirror));
             continue;
         }
@@ -781,13 +800,15 @@ std::vector<Draw> CampaignTutorial::drawList() const {
     // CampaignGameScreen places UserInterface above StickWar.tipBox.
     drawTooltips(out);
     const auto hudStart=out.size();
-    out.push_back(sprite(10118,art_.art.contains({10118,10001}) ? 10001 : 1,{0,0}));
+    out.push_back(sprite(10118,art_.art.contains({10118,11001}) ? 11001 : art_.art.contains({10118,10001}) ? 10001 : 1,{0,0}));
+    drawToolbar(out);
     if(art_.art.contains({10102,60001})) {
         const bool hover=cursor_ && Rect{320,674,48,22}.contains(*cursor_);
         out.push_back(sprite(10102,60000+(hover ? pcPressed_ ? 3 : 2 : 1),{344,683.5}));
     }
     if (step_==Step::Free && cinematic_<0) out.push_back(sprite(10094,fastForward_ ? 2 : 1,{530,568}));
     drawProduction(out);
+    drawRecruitHighlight(out);
     auto dot=[&](Point p,unsigned color) {
         out.push_back(Draw::shape(Draw::Kind::Box,{minimap.x+p.x/length_*minimap.w,
                                   minimap.y+p.y/depth_*minimap.h,2.5,2.5},color));
@@ -860,6 +881,12 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         out.push_back(sprite(10139,1,{425,100},size));
         out.push_back(Draw::label({425-198.3*size,100-39.45*size,396.6*size,100*size},
             "Press SPACE to select all of your attacking units",17*size,0xffffff,true));
+    }
+    if (deadsHintTicks_>=0) {
+        constexpr double size=1.3;
+        out.push_back(sprite(10139,1,{425,100},size));
+        out.push_back(Draw::label({425-198.3*size,100-39.45*size,396.6*size,100*size},
+            "A unit has been poisoned. Garrisoning this unit will cure its poison",17*size,0xffffff,true));
     }
     if (displayed_ && step_<=Step::Objective) {
         const double yOffset=displayed_==10 ? 75 : displayed_==16 ? 250 : 0;

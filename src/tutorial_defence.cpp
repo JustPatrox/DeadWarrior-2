@@ -19,6 +19,8 @@ double CampaignTutorial::frontLine() const {
     return front;
 }
 bool CampaignTutorial::hitControl(const char* name,Point p) const {
+    if(!toolbarParts_.empty() && (std::string_view(name)=="garrisonButton" || std::string_view(name)=="defendButton" || std::string_view(name)=="attackButton"))
+        return toolbarControlHit(name,p);
     const auto& mask=controlMasks_.at(name);
     return std::any_of(mask.begin(),mask.end(),[p](auto& row){return row.contains(p);});
 }
@@ -216,6 +218,16 @@ void CampaignTutorial::advanceArrow(Flight& a) {
                 a.previousDistance=std::abs(x-s.position.x);
             }
         }
+        if (a.target==-1 && a.enemy && wall_.hp>0 && std::abs(a.depth-wall_.position.y)<150) {
+            // Wall inherits Unit's narrow arrow-entry box (15 x 250), then
+            // uses its wider checkForHitPoint rectangle for projectile exit.
+            for (int pos:{0,-1,1}) {
+                const double wx=x+pos*tip.x-wall_.position.x,wy=y+pos*tip.y-wall_.position.y;
+                if (std::abs(wx)<15 && wy>-250 && wy<0) {
+                    a.target=ownWall;a.previousDistance=std::abs(x-wall_.position.x);break;
+                }
+            }
+        }
     } else {
         auto& u=combatTarget(a.target);
         const double distance=std::abs(x-u.position.x);
@@ -229,6 +241,7 @@ void CampaignTutorial::advanceArrow(Flight& a) {
                 damage(u,hit); impactSound(u);
                 if (a.guts && u.symbol!=1904 && u.symbol!=1174 && !u.poison) {
                     u.poison=a.poison; sound("PoisonedSound",u.position);
+                    if (a.poison>0) ++poisonHits_;
                 }
             }
             area=a.hidden=true; ++impacts_;
