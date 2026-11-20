@@ -21,8 +21,8 @@ void WorkInProgress::focus(int direction) {
 WorkInProgress::Choice WorkInProgress::selected() const {return focused_<0 ? Choice::None : Choice(focused_+1);}
 std::vector<Draw> WorkInProgress::drawList() const {
     std::vector<Draw> out;
-    out.push_back({976,1,art_.texture(976).bounds});
-    out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::width,700},0,.78));
+    coverBackdrop(out,{976,1,art_.texture(976).bounds},{Viewport::left,0,Viewport::width,Viewport::height});
+    out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::width,Viewport::height},0,.78));
     out.push_back(Draw::label({0,205,850,115},
         "Thanks for playing! But this part is still a work in progress. Stay tuned for an update!",27,0xffcc00,true));
     out.push_back(Draw::label({200,352,450,38},"Please select one",22,0xf2f2f2,true));

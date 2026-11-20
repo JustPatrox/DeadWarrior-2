@@ -20,7 +20,7 @@ macOS app: `out/package/DeadWarrior 2.app`. Release packages target macOS 11 or 
 
 ## Settings, saves, and diagnostics
 
-Tap Option on macOS or press Insert on Linux to open PC settings. Either Option key works; Option combinations keep their normal behavior. F11 changes fullscreen. MENU, Esc, and P open the campaign pause menu. Presentation supports a resolution selector, windowed/borderless/fullscreen, V-Sync, an FPS counter, and 30/60/120/240/unlimited presentation rates. Gameplay remains at 30 Hz. The pause menu freezes gameplay and narration; music has an independent toggle.
+Tap Option on macOS or press Insert on Linux to open PC settings. Either Option key works; Option combinations keep their normal behavior. F11 changes fullscreen. MENU, Esc, and P open the campaign pause menu. Presentation supports a resolution selector, windowed/borderless/fullscreen, V-Sync, an FPS counter, optional cursor confinement, 16:9/Stretched/Dynamic [Experimental] aspect modes, and 30/60/120/240/unlimited presentation rates. Gameplay remains at 30 Hz. The pause menu freezes gameplay and narration; music has an independent toggle.
 
 SDL chooses the per-user directory. Typical locations:
 
@@ -31,7 +31,7 @@ The directory contains `campaign.sav`, `options.ini`, and one overwritten `laste
 
 ## Validation
 
-The release workflow builds each architecture on its own GitHub-hosted runner, runs the tutorial/Archidon/magic/rebels/giants/bomber/knight deterministic probes, installs the package, and runs the portable executable with `--smoke-test out/checks --save-dir out/test-save`. The smoke test uses the actual renderer and shared input handlers to check menu navigation, all eight mission entries at 720p/1080p, pause/resume, persistent options, audio loading/playback, save reload, and the unfinished-content guard. Linux runs under Xvfb with Mesa; macOS uses its desktop renderer. The CI audio device is a dummy device; this does not verify physical speakers or every hardware/driver combination.
+The release workflow builds each architecture on its own GitHub-hosted runner, runs the tutorial/Archidon/magic/rebels/giants/bomber/knight, toolbar, and original-blend probes, installs the package, and runs the portable executable with `--smoke-test out/checks --save-dir out/test-save`. The smoke test uses the actual renderer and shared input handlers to check menu navigation, all eight mission entries at 720p/1080p, Stretched and Dynamic snapshots (including ultrawide and portrait), borderless desktop mode, mouse-lock preference restoration, the PC toolbar button, original tooltips, pause/resume, persistent options, audio loading/playback, save reload, and the unfinished-content guard. Linux runs under Xvfb with Mesa; macOS uses its desktop renderer. The CI audio device is a dummy device; this does not verify physical speakers or every hardware/driver combination.
 
 Screenshots, logs, and JSON reports are retained as workflow artifacts. Full gameplay parity and manual testing on additional systems remain ongoing.
 

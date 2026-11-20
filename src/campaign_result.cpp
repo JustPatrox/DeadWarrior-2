@@ -50,7 +50,7 @@ void CampaignTutorial::tickOutcome() {
 }
 std::vector<Draw> CampaignTutorial::drawOutcome() const {
     std::vector<Draw> out;
-    out.push_back(sprite(286,1,{0,0}));
+    coverBackdrop(out,sprite(286,1,{0,0}),{Viewport::left,0,Viewport::width,Viewport::height});
     out.push_back(sprite(343,1+mission_,{0,0}));
     out.push_back(sprite(312,won() ? 3 : 4,{165.5,40}));
     auto time=[](int seconds){

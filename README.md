@@ -42,7 +42,9 @@ This project is not affiliated with Max Games or the original game's creators. S
 | 16:9 rendering, audio, and contextual cursors | Implemented |
 | Windowed, borderless window, and fullscreen modes | Insert on Windows/Linux; Option on macOS |
 | 30 / 60 / 120 / 240 FPS or unlimited | Available |
-| V-Sync, FPS counter, and render resolution | Available |
+| V-Sync, FPS counter, render resolution, and cursor lock | Available |
+| Aspect modes | 16:9 default, Stretched, Dynamic [Experimental] |
+| Castle hover, tooltips, and PC toolbar button | Original artwork, font, hit areas, and animation states |
 | Original campaign pause menu | MENU, Esc, or P |
 | Persistent PC settings | Saved in `options.ini` |
 | Remaining campaign and cutscenes | Pending |
@@ -52,7 +54,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 ## Download and play
 
-**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.5)**
+**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.6)**
 
 | Platform | Release asset | Start |
 | --- | --- | --- |
@@ -90,7 +92,9 @@ See the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md
 | **Esc** | Close PC settings or pause/resume the battle |
 | **P** | Pause/resume the battle |
 
-Use **Insert → Show FPS → On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
+The original **PC** toolbar button also opens settings. Use **Insert → Show FPS → On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. Cursor lock confines the pointer during an active battle and releases it for pause, settings, focus loss, and minimization. **Stretched** fills the display; **Dynamic [Experimental]** expands the logical camera and adapts the HUD, terrain, fog, and minimap. The default remains **16:9**. Borderless covers the full monitor. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
+
+See the [preview.6 fixes and validation](docs/todo-checkpoint.md) for the completed TODO items and test scope.
 
 ## Reporting a problem
 

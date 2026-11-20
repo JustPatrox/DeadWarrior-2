@@ -46,9 +46,10 @@ This section is for developers changing extraction or asset-compilation tools. I
 | CMake | 3.24 or later; the script uses Visual Studio's bundled version | [CMake](https://cmake.org/download/) |
 | Python | 3.11 x64 | [Python](https://www.python.org/downloads/windows/) |
 | Java | 21 x64, JRE or JDK; tested with Temurin 21.0.13+9 | [Eclipse Temurin](https://adoptium.net/temurin/releases/?version=21) |
+| Adobe standalone reference player | Developer-only castle export; place the executable at `work/tools/flashplayer-sa.exe` | Existing local reference tool |
 | JPEXS FFDec | Complete 26.5.0 ZIP, including its `lib` directory | [JPEXS](https://github.com/jindrapetrik/jpexs-decompiler/releases/tag/version26.5.0) |
 
-Flash Player and emulation software are not required to run the port. Optional comparison tools use reference players and Playwright; these are not game dependencies.
+Flash Player and emulation software are not required to run the port. The optional castle exporter runs an isolated diagnostic copy in the Adobe standalone reference player to preserve original labeled animation stops, filters, and blend modes. Other comparison tools use reference players and Playwright. These are developer tools, not game dependencies.
 
 ### Regenerate resources
 

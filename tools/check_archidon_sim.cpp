@@ -1,9 +1,26 @@
 #include "campaign_tutorial.hpp"
 #include "campaign_intermission.hpp"
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
 using namespace sw2;
+namespace sw2 {
+// Prepared encounter isolates cloak/contact from the natural campaign's
+// recruitment and battle outcome. It is not a balance-parity playthrough.
+struct CampaignProbe {
+    static int poisonEncounter(CampaignTutorial& game) {
+        const int ninja=game.spawn(7289,{3000,game.depth_/2},true);
+        const int defender=game.spawn(6456,{2880,game.depth_/2});
+        game.enemyPopulation_+=int(game.stat(7289,"population"));
+        game.population_+=int(game.stat(6456,"population"));
+        auto& actor=game.units_[ninja];actor.order=CampaignTutorial::Order::Attack;actor.target=defender;actor.engageOnMove=true;
+        auto& guard=game.units_[defender];guard.order=CampaignTutorial::Order::Stand;guard.hold=true;
+        for(int i=0;i<900&&!game.poisonHits_;++i) {++game.ticks_;game.simulateActors(false);}
+        return game.poisonHits_;
+    }
+};
+}
 
 int main(int argc,char** argv) {
     try {
@@ -76,7 +93,9 @@ int main(int argc,char** argv) {
             auto sample=[&]{
                 const auto state=shadow.battleStatus();
                 ninjas=std::max(ninjas,state.enemyNinjas);
-                poisoned=std::max(poisoned,state.poisonedAllies);
+                // Cloak can kill a Miner on contact, so counting only living
+                // poisoned allies misses a successful original poison strike.
+                poisoned=std::max({poisoned,state.poisonedAllies,state.poisonHits});
             };
             for (int i=0;i<2400;++i) {shadow.tick(); sample();}
             require(shadow.battleStatus().archers>=2,"Archery range did not train an allied Archidon");
@@ -87,6 +106,12 @@ int main(int argc,char** argv) {
                 if (i%120==0) shadow.drawList();
             }
             require(shadow.ended(),"Shadowrath battle did not reach an outcome");
+            if(!poisoned) {
+                CampaignTutorial contact(art,dir,progress);
+                poisoned=CampaignProbe::poisonEncounter(contact);
+                std::cout<<"Prepared cloak/contact encounter "<<poisoned<<'\n';
+            }
+            std::cout<<"Shadowrath outcome tick "<<shadow.ticks()<<" ninjas "<<ninjas<<" poisoned "<<poisoned<<'\n';
             require(ninjas>0 && poisoned>0,"Shadowrath cloak attack did not poison an ally");
             for (int i=0;i<120;++i) shadow.tick();
             shadow.drawList();

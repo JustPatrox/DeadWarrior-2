@@ -28,7 +28,7 @@ package {
             busy=true;
             reader.load(new URLRequest(base+"next?t="+getTimer()));
         }
-        private function prepare(app:Object):void {
+        private function prepare(app:Object,level:int=1):void {
             var gameType:Class=getDefinitionByName("com.brockw.stickwar.engine::StickWar") as Class;
             var randomType:Class=getDefinitionByName("com.brockw.random::Random") as Class;
             var game:Object=new gameType(app,app.getScreen("campaignGameScreen"));
@@ -36,10 +36,10 @@ package {
             game.units=new Dictionary();
             game.random=new randomType(0);
             app.stickWar=game;
-            app.campaign.currentLevel=1;
-            app.campaign.campaignPoints=1;
+            app.campaign.currentLevel=level;
+            app.campaign.campaignPoints=level==1 ? 1 : 0;
             app.campaign.difficultyLevel=1;
-            app.showScreen("campaignUpgradeScreen");
+            app.showScreen(level==1 ? "campaignUpgradeScreen" : "campaignMap");
         }
         private function onCommand(e:Event):void {
             busy=false;
@@ -50,7 +50,7 @@ package {
             try {
                 var app:Object=DisplayObjectContainer(root).getChildAt(0);
                 if (parts[0]=="prepare") {
-                    prepare(app);
+                    prepare(app,parts.length>3 ? int(parts[3]) : 1);
                     request=new URLRequest(base+"prepared");
                     request.data="ok";
                 } else {

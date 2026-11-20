@@ -42,7 +42,7 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
     BattleStatus status{goldBalance_,mana_,population_,int(production_[0][0].units.size()),
         int(production_[0][1].units.size()),workers,fighters,statues_[0].hp,statues_[1].hp,reinforcement_};
     for (const auto& u:units_) if (u.hp>0) {
-        if (!u.enemy && !isWorker(u.symbol)) status.fighterHealth+=u.hp;
+        if (!u.enemy && !isWorker(u.symbol)) {status.fighterHealth+=u.hp;status.furthestMilitary=std::max(status.furthestMilitary,u.position.x);}
         if (!u.enemy && u.symbol==sword && mission_ && u.rageCounter<rules_.at("rage.effect")) ++status.activeRage;
         if (!u.enemy && u.symbol==spearton) ++status.lancers;
         if (!u.enemy && u.symbol==archer) ++status.archers;
@@ -65,7 +65,13 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
     status.bomberWaves=bomberWaves_;status.nextBomberWave=nextBomberWave_;status.explosions=explosions_;
     status.boulderShots=boulderShots_;status.boulderHits=boulderHits_;
     status.knightHint=knightHintTicks_;
+    status.poisonHits=poisonHits_;
     return status;
+}
+std::vector<CampaignTutorial::UnitStatus> CampaignTutorial::unitStatus() const {
+    std::vector<UnitStatus> out;
+    for(const auto& u:units_) out.push_back({u.symbol,u.position,u.enemy,u.hp,u.target,u.pose,u.frame,u.cloakTicks,u.garrisoned});
+    return out;
 }
 CampaignTutorial::Unit& CampaignTutorial::combatTarget(int id) {
     if (id==ownStatue) return statues_[0];
@@ -173,6 +179,7 @@ void CampaignTutorial::updateProduction() {
         const double dx=b==0 ? 850+random()*4.656612875245797e-10*40-20 : 1000;
         u.goal={base+dir*dx,depth_/2+random()*4.656612875245797e-10*60-30};
         u.order=Order::Move; u.engageOnMove=true;
+        if (side==0 && !isWorker(type) && orders_[0]==ArmyOrder::Attack) u.goal={statues_[1].position.x,depth_/2};
         if (orders_[side]==ArmyOrder::Garrison) {
             u.garrisoned=true; u.goal={base-dir*home/3,depth_/2};
         }
@@ -267,6 +274,18 @@ void CampaignTutorial::updateOpponent() {
         else if (aggression<=.4) { order=ArmyOrder::Attack; destination=length_/2; }
     }
     orderArmy(true,order,destination);
+    // EnemyGoodTeamAi.updateNinjas casts independently of the current
+    // movement order, including while regrouping or retreating.
+    for(auto& ninjaUnit:units_) if(ninjaUnit.enemy && ninjaUnit.symbol==ninja && ninjaUnit.hp>0 && !ninjaUnit.cloakCooldown) {
+        const bool near=std::any_of(units_.begin(),units_.end(),[&](const Unit& target){
+            return !target.enemy && target.hp>0 && !target.cloakTicks &&
+                (!target.garrisoned || target.position.x>home) && std::abs(target.position.x-ninjaUnit.position.x)<500;
+        });
+        if(near) {
+            ninjaUnit.cloakTicks=int(stat(ninjaUnit,"stealth.effect"));ninjaUnit.cloakCooldown=int(stat(ninjaUnit,"stealth.cooldown"));
+            sound("ninjaCloakSound",ninjaUnit.position);
+        }
+    }
     if (aggression<.6 && (enemyPopulation_<6 || weak) && workers<rules_.at("composition.Miner") &&
         production_[1][0].units.empty()) recruit(true,0);
     // The first level's military build order contains only the Spearton. After
@@ -328,6 +347,13 @@ void CampaignTutorial::simulateActors(bool strategy) {
         step_=statues_[1].hp<=0 ? Step::Victory : Step::Defeat; counter_=0;
         return;
     }
+    if ((ticks_-1)%150==0) {
+        const std::string suffix=upgrades_[9] ? "2" : upgrades_[3] ? "1" : "";
+        goldBalance_+=int(rules_.at(suffix.empty() ? "passiveIncome" : "passiveIncomeUpgraded"+suffix));
+        // Team.gold/mana and their setters are int in the original. Its
+        // fractional XML mana awards truncate separately on each payment.
+        mana_+=int(rules_.at(suffix.empty() ? "passiveMana" : "passiveManaUpgraded"+suffix));
+    }
     if (step_>=Step::Commands) updateBattle(strategy);
     for (auto& u:units_) updateUnit(u);
     if (enemyCastleResearchTicks_>=0 && --enemyCastleResearchTicks_<0) enemyCastleArcher_=true;
@@ -349,7 +375,7 @@ void CampaignTutorial::updateBattle(bool strategy) {
     if (strategy && mission_==6) updateBomberController();
     if (strategy && mission_==7) updateKnightController();
     for (auto& u:units_) {
-        if (!u.canFight || !u.engageOnMove || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
+        if (!u.canFight || (!u.engageOnMove && u.order!=Order::Stand) || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
         const auto& statue=statues_[!u.enemy];
         auto squared=[&](const Unit& target){
             const double x=target.position.x-u.position.x,y=target.position.y-u.position.y;

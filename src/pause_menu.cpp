@@ -62,7 +62,7 @@ PauseMenu::Action PauseMenu::key(int key) {
 std::vector<Draw> PauseMenu::drawList(bool sound,bool music) const {
     std::vector<Draw> out;
     if (!open_) return out;
-    out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::width,700},0,.7));
+    out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::width,Viewport::height},0,.7));
     out.push_back({9964,1,art_.texture(9964).bounds});
     const int start=confirmation_!=Action::None ? 6 : 0;
     const int end=confirmation_!=Action::None ? 8 : 6;

@@ -12,6 +12,8 @@ public:
     int frameLimit() const;
     bool vsync() const { return vsync_; }
     bool showFps() const { return showFps_; }
+    bool mouseLock() const {return mouseLock_;}
+    void configureViewport(int w,int h) const {sw2::Viewport::configure(sw2::Viewport::Aspect(aspectChoice_),w,h);}
     std::pair<int,int> renderSize(int width,int height) const;
     std::string resolutionLabel() const;
     bool loadOptions(const std::filesystem::path&);
@@ -31,7 +33,8 @@ private:
     Mode mode_{Mode::Windowed};
     Mode startupMode_{Mode::Windowed};
     std::string savedOptions_;
-    bool open_{},vsync_{},showFps_{};
+    bool open_{},vsync_{},showFps_{},mouseLock_{};
+    int aspectChoice_{};
     int rateChoice_{1};
     int resolutionChoice_{}, resolutionFocus_{};
     int focused_{}, pressed_{-1};

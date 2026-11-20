@@ -23,7 +23,7 @@ int main(int argc,char** argv) {
         require(scene.battleStatus().mana==0 && scene.battleStatus().gold==400,"Meric training price differs from XML");
         click({225,595});
         require(scene.battleStatus().mana==200 && scene.battleStatus().gold==700,"Meric cancellation failed");
-        scene.press({-190,240}); scene.point(Point{1040,570}); scene.release(Point{1040,570});
+        scene.selectArmy();
         scene.unitAbility();
         scene.point(Point{300,450});
         require(scene.cursorSymbol()==8785,"Original explosion cursor missing");

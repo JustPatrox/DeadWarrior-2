@@ -2,6 +2,7 @@
 import ctypes as ct
 from ctypes import wintypes as wt
 import json
+import re
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +13,7 @@ from native_client import capture_from_game
 from reference_projector import user,window
 
 ROOT=Path(__file__).resolve().parents[1]
+PLAYABLE=int(re.search(r"playableLevelCount\s*=\s*(\d+)",(ROOT/"src/campaign_progress.hpp").read_text(encoding="utf-8")).group(1))
 OUT=ROOT/"evidence/windows-unfinished"
 OUT.mkdir(parents=True,exist_ok=True)
 EXE=Path(os.environ.get("DW2_TEST_EXE",ROOT/"out/windows-x64/DeadWarrior 2.exe"))
@@ -25,7 +27,7 @@ def fixture(folder,level):
 
 def run(width,height,checks):
     with tempfile.TemporaryDirectory() as temporary:
-        folder=Path(temporary); save=fixture(folder,8)
+        folder=Path(temporary); save=fixture(folder,PLAYABLE)
         sentinel=folder/"unrelated.txt"; sentinel.write_text("preserve")
         capture=OUT/f"{width}x{height}-capture.png"; trace=OUT/f"{width}x{height}-trace.tsv"
         LOG.write_text("previous-session-marker\n")
@@ -62,7 +64,7 @@ def run(width,height,checks):
                     wait(lambda:state()&1)
                 enter(); shot("unfinished")
                 assert "previous-session-marker" not in LOG.read_text()
-                assert "work-in-progress unavailable_level=9" in LOG.read_text()
+                assert f"work-in-progress unavailable_level={PLAYABLE+1}" in LOG.read_text()
                 if not checks:
                     click(425,550); assert process.wait(timeout=8)==0
                     (OUT/f"{width}x{height}-lastest.log").write_bytes(LOG.read_bytes())
@@ -74,7 +76,7 @@ def run(width,height,checks):
                 click(175,465); assert save.exists() and state()&1
                 user.SendMessageW(hwnd,0x100,0x1b,0)
                 click(675,465); wait(lambda:not state()&1)
-                assert save.exists() and save.read_text().splitlines()[1].split()[:2]==["8","8"]
+                assert save.exists() and save.read_text().splitlines()[1].split()[:2]==[str(PLAYABLE)]*2
                 assert "RESTART completed saves=kept" in LOG.read_text()
                 enter(); click(175,465); wait(lambda:not state()&1)
                 assert not save.exists() and sentinel.read_text()=="preserve"
@@ -113,9 +115,11 @@ def banner_check(width=1280,height=720):
                     if trace.exists() and trace.read_text().splitlines()[-1].startswith("27\t"): break
                     time.sleep(.1)
                 else: raise AssertionError("Battle did not open")
-                click(344,683)
+                click(310,600);time.sleep(2.6)
+                camera=float(trace.read_text().splitlines()[-1].split('\t')[2])
+                click(550-camera,100);click(675,650)
                 assert user.SendMessageW(hwnd,0x8000+18,0,0)&2,"Pending button did not show banner"
-                assert "UNAVAILABLE button=HUD.highButton symbol=10102" in LOG.read_text()
+                assert "UNAVAILABLE button=HUD.CastleArcher additional research" in LOG.read_text()
                 capture_from_game(hwnd,capture).save(OUT/"pending-button.png")
                 time.sleep(6.2); assert not user.SendMessageW(hwnd,0x8000+18,0,0)&2
                 limits=[]

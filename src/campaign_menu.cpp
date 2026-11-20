@@ -5,12 +5,42 @@
 #include <stdexcept>
 
 namespace sw2 {
-Viewport::Viewport(int w, int h) : scale(std::min(w/width,h/height)),
-    pixels{(w-width*scale)/2,(h-height*scale)/2,width*scale,height*scale} {}
+void Viewport::configure(Aspect mode,int w,int h) {
+    aspect=mode;height=700;width=700.*16/9;
+    if(mode==Aspect::Dynamic && w>0 && h>0) {
+        const double ratio=double(w)/h;
+        width=std::max(1000.,700*ratio);height=std::max(700.,1000/ratio);
+    }
+    left=(850-width)/2;right=left+width;
+}
+Viewport::Viewport(int w,int h):scale(aspect==Aspect::Stretched ? h/height : std::min(w/width,h/height)),
+    scaleX(aspect==Aspect::Stretched ? w/width : scale),
+    pixels{(w-width*scaleX)/2,(h-height*scale)/2,width*scaleX,height*scale} {}
 
 std::optional<Point> Viewport::toStage(Point p) const {
     if (!pixels.contains(p) || scale <= 0) return {};
-    return Point{left + (p.x - pixels.x)/scale,(p.y-pixels.y)/scale};
+    return Point{left + (p.x - pixels.x)/scaleX,(p.y-pixels.y)/scale};
+}
+std::optional<Point> Viewport::battlePoint(std::optional<Point> p) {
+    if(p && height>700) {
+        const double hud=height-125;
+        if(p->y>=hud) p->y-=height-700;
+        else if(p->y>=575) return {};
+    }
+    return p;
+}
+void coverBackdrop(std::vector<Draw>& out,Draw d,Rect area) {
+    const auto r=d.target;
+    const double xs[]={std::min(area.x,r.x),r.x,r.x+r.w,std::max(area.x+area.w,r.x+r.w)};
+    const double ys[]={std::min(area.y,r.y),r.y,r.y+r.h,std::max(area.y+area.h,r.y+r.h)};
+    for(int y=0;y<3;++y) for(int x=0;x<3;++x) {
+        if(x==1 && y==1) continue;
+        if(xs[x+1]<=xs[x] || ys[y+1]<=ys[y]) continue;
+        auto edge=d;edge.target={xs[x],ys[y],xs[x+1]-xs[x],ys[y+1]-ys[y]};
+        edge.source=Rect{x==0 ? 0. : x==2 ? .999 : 0.,y==0 ? 0. : y==2 ? .999 : 0.,x==1 ? 1. : .001,y==1 ? 1. : .001};
+        out.push_back(std::move(edge));
+    }
+    out.push_back(std::move(d));
 }
 
 void MenuAssets::loadTextures(const std::filesystem::path& dir) {
@@ -37,6 +67,10 @@ void MenuAssets::loadPlacements(const std::filesystem::path& dir) {
 MenuAssets::MenuAssets(const std::filesystem::path& dir) {
     loadTextures(dir);
     loadPlacements(dir);
+    for(const char* folder:{"interface","tooltips","castle","pc-button"}) {
+        const auto extra=dir.parent_path()/folder;
+        if(std::filesystem::exists(extra/"textures.tsv")) loadTextures(extra);
+    }
     std::ifstream opacity(dir/"alpha.tsv");
     int id, frame;
     double value;
@@ -150,11 +184,13 @@ std::vector<Action> CampaignMenu::takeActions() {
 }
 
 void CampaignMenu::compose(std::vector<Draw>& draws,std::vector<Hit>& hits) const {
-    const Rect stage{Viewport::left,0,Viewport::width,700};
+    const Rect stage{Viewport::left,0,Viewport::width,Viewport::height};
     auto sprite = [&](int id,int frame,double x,double y,double sx,double sy,double opacity=1.0) {
         if (opacity<=0) return;
         const auto& b=assets_.texture(id,frame).bounds;
-        draws.push_back({id,frame,{x+sx*b.x,y+sy*b.y,sx*b.w,sy*b.h},opacity});
+        Draw d{id,frame,{x+sx*b.x,y+sy*b.y,sx*b.w,sy*b.h},opacity};
+        if(id==976) coverBackdrop(draws,std::move(d),{Viewport::left,0,Viewport::width,Viewport::height});
+        else draws.push_back(std::move(d));
     };
     auto placed = [&](const Placement& p,double x,double y,bool interactive) {
         sprite(p.symbol,interactive ? buttonFrame(p.symbol) : 1,x,y,p.sx,p.sy);

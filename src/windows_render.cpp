@@ -15,6 +15,19 @@ using sw2::Draw;
 using sw2::Rect;
 using sw2::Viewport;
 namespace gd = Gdiplus;
+sw2::Raster loadWindowsPng(const std::filesystem::path& path) {
+    gd::Bitmap image(path.c_str());
+    if(image.GetLastStatus()!=gd::Ok) throw std::runtime_error("Cannot decode castle texture");
+    sw2::Raster result;result.width=int(image.GetWidth());result.height=int(image.GetHeight());
+    result.rgba.resize(size_t(result.width)*result.height*4);
+    gd::Rect bounds(0,0,result.width,result.height);gd::BitmapData data;
+    if(image.LockBits(&bounds,gd::ImageLockModeRead,PixelFormat32bppARGB,&data)!=gd::Ok) throw std::runtime_error("Cannot read castle texture");
+    for(int y=0;y<result.height;++y) for(int x=0;x<result.width;++x) {
+        auto* p=static_cast<BYTE*>(data.Scan0)+ptrdiff_t(y)*data.Stride+4*x;
+        auto* d=result.rgba.data()+4*(size_t(y)*result.width+x);d[0]=p[2];d[1]=p[1];d[2]=p[0];d[3]=p[3];
+    }
+    image.UnlockBits(&data);return result;
+}
 
 namespace {
 D2D1_RECT_F rectangle(Rect r) {
@@ -29,24 +42,28 @@ struct HardwareRenderer::Device {
         unsigned used{};
     };
     const sw2::MenuAssets& assets;
+    sw2::RasterCompositor compositor;
+    std::shared_ptr<const sw2::Raster> compositePixels;
+    ComPtr<ID2D1Bitmap> compositeBitmap;
     ComPtr<ID2D1Factory> factory;
     ComPtr<IDWriteFactory> fonts;
     ComPtr<ID2D1HwndRenderTarget> target;
     ComPtr<ID2D1SolidColorBrush> brush;
-    std::map<std::tuple<int,int,int>,Texture> textures;
+    std::map<std::pair<std::filesystem::path,int>,Texture> textures;
     std::map<std::pair<double,bool>,ComPtr<IDWriteTextFormat>> formats;
     size_t textureBytes{};
     unsigned frame{};
     bool available{};
     bool synchronized{};
 
-    explicit Device(const sw2::MenuAssets& a):assets(a) {
+    explicit Device(const sw2::MenuAssets& a):assets(a),compositor(a,loadWindowsPng) {
         available=SUCCEEDED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,factory.GetAddressOf())) &&
             SUCCEEDED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),
                                           reinterpret_cast<IUnknown**>(fonts.GetAddressOf())));
     }
 
     void discardTarget() {
+        compositeBitmap.Reset();compositePixels.reset();
         textures.clear();
         textureBytes=0;
         brush.Reset();
@@ -79,7 +96,22 @@ struct HardwareRenderer::Device {
     }
 
     ID2D1Bitmap* texture(const Draw& d) {
-        const auto key=std::tuple(d.symbol,d.frame,d.redOffset);
+        if(d.children) {
+            const auto pixels=compositor.image(d);
+            if(compositePixels==pixels && compositeBitmap) return compositeBitmap.Get();
+            std::vector<BYTE> bgra(pixels->rgba.size());
+            for(size_t i=0;i<bgra.size();i+=4) {
+                const auto* s=pixels->rgba.data()+i;const int a=s[3];
+                bgra[i]=BYTE((s[2]*a+127)/255);bgra[i+1]=BYTE((s[1]*a+127)/255);bgra[i+2]=BYTE((s[0]*a+127)/255);bgra[i+3]=s[3];
+            }
+            const auto size=D2D1::SizeU(UINT(pixels->width),UINT(pixels->height));
+            if(compositeBitmap && (compositeBitmap->GetPixelSize().width!=size.width || compositeBitmap->GetPixelSize().height!=size.height)) compositeBitmap.Reset();
+            HRESULT hr;
+            if(compositeBitmap) hr=compositeBitmap->CopyFromMemory(nullptr,bgra.data(),size.width*4);
+            else hr=target->CreateBitmap(size,bgra.data(),size.width*4,D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED)),compositeBitmap.GetAddressOf());
+            if(FAILED(hr)) return nullptr;compositePixels=pixels;return compositeBitmap.Get();
+        }
+        const auto key=std::pair{assets.texture(d.symbol,d.frame).file,d.redOffset};
         if (const auto found=textures.find(key); found!=textures.end()) {
             found->second.used=frame;
             return found->second.bitmap.Get();
@@ -196,9 +228,9 @@ bool HardwareRenderer::draw(HWND hwnd,int w,int h,const std::vector<Draw>& draws
     auto& d=*device_;
     if (!d.prepare(hwnd,D2D1::SizeU(UINT(w),UINT(h)),vsync)) return false;
     const Viewport view(w,h);
-    const float s=float(view.scale);
+    const float s=float(view.scale),sx=float(view.scaleX);
     using Matrix=D2D1::Matrix3x2F;
-    const auto stage=Matrix::Scale(s,s)*Matrix::Translation(float(view.pixels.x-Viewport::left*view.scale),
+    const auto stage=Matrix::Scale(sx,s)*Matrix::Translation(float(view.pixels.x-Viewport::left*view.scaleX),
                                                            float(view.pixels.y));
     auto* target=d.target.Get();
     ++d.frame;
@@ -212,7 +244,7 @@ bool HardwareRenderer::draw(HWND hwnd,int w,int h,const std::vector<Draw>& draws
         const auto r=rectangle(item.target);
         if (r.bottom<=0 || r.top>=Viewport::height || r.right<=Viewport::left || r.left>=Viewport::right ||
             r.right<=r.left || r.bottom<=r.top || item.alpha<=0) continue;
-        if (!item.symbol) { d.shape(item,r); continue; }
+        if (!item.symbol && !item.children) { d.shape(item,r); continue; }
         auto* bitmap=d.texture(item);
         if (!bitmap) { complete=false; break; }
         if (item.rotation || item.mirrored) {
@@ -220,7 +252,11 @@ bool HardwareRenderer::draw(HWND hwnd,int w,int h,const std::vector<Draw>& draws
             const auto mirror=Matrix::Scale(item.mirrored ? -1.f : 1.f,1.f,center);
             target->SetTransform(mirror*Matrix::Rotation(float(item.rotation),center)*stage);
         }
-        target->DrawBitmap(bitmap,r,float(item.alpha));
+        if(item.source) {
+            const auto b=bitmap->GetSize();const auto a=*item.source;
+            const auto source=D2D1::RectF(float(a.x*b.width),float(a.y*b.height),float((a.x+a.w)*b.width),float((a.y+a.h)*b.height));
+            target->DrawBitmap(bitmap,r,float(item.alpha),D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,source);
+        } else target->DrawBitmap(bitmap,r,float(item.alpha));
         if (item.rotation || item.mirrored) target->SetTransform(stage);
     }
     target->PopAxisAlignedClip();

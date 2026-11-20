@@ -1,5 +1,6 @@
 #pragma once
 #include "campaign_menu.hpp"
+#include "raster_compositor.hpp"
 #include <SDL3/SDL.h>
 #include <array>
 #include <fstream>
@@ -20,6 +21,10 @@ class SdlRenderer {
     struct Cached {SDL_Texture* image{}; size_t bytes{}; unsigned serial{};};
     SDL_Renderer* renderer_{};
     const MenuAssets& art_;
+    RasterCompositor compositor_;
+    std::shared_ptr<const Raster> compositePixels_;
+    SDL_Texture* compositeTexture_{};
+    SDL_Texture* composite(const Draw&);
     std::filesystem::path root_;
     std::map<std::pair<std::filesystem::path,int>,Cached> images_;
     SDL_Texture* font_{};
@@ -71,8 +76,8 @@ class SdlDisplay {
     SDL_Window* window_{};
     SDL_Renderer* renderer_{};
     std::filesystem::path path_;
-    int mode_{},rate_{1},resolution_{},focus_{},pressed_{-1};
-    bool open_{},vsync_{},fps_{};
+    int mode_{},rate_{1},resolution_{},focus_{},pressed_{-1},aspect_{};
+    bool open_{},vsync_{},fps_{},mouseLock_{};
     std::array<int,4> windowed_{100,100,1280,720};
     void apply(int choice);
     void mode(int);
@@ -82,6 +87,8 @@ public:
     void setOpen(bool value) {open_=value;focus_=mode_;pressed_=-1;}
     int frameLimit() const;
     bool showFps() const {return fps_;}
+    bool mouseLock() const {return mouseLock_;}
+    void configureViewport(int w,int h) const {Viewport::configure(Viewport::Aspect(aspect_),w,h);}
     void fullscreen() {mode(mode_==2 ? 0 : 2);save();}
     void key(SDL_Keycode);
     void pointer(int action,std::optional<Point>);

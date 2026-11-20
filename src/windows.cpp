@@ -41,18 +41,35 @@ struct GdiSession {
 
 class Renderer {
     const MenuAssets& assets_;
-    std::map<std::pair<int,int>,std::unique_ptr<gd::Bitmap>> images_;
+    RasterCompositor compositor_;
+    std::shared_ptr<const Raster> compositePixels_;
+    std::vector<BYTE> compositeBytes_;
+    std::unique_ptr<gd::Bitmap> compositeBitmap_;
+    gd::Bitmap& composite(const Draw& d) {
+        auto pixels=compositor_.image(d);
+        if(pixels!=compositePixels_) {
+            compositeBitmap_.reset();compositeBytes_.resize(pixels->rgba.size());
+            for(size_t i=0;i<compositeBytes_.size();i+=4) {
+                const auto* p=pixels->rgba.data()+i;auto* b=compositeBytes_.data()+i;
+                b[0]=p[2];b[1]=p[1];b[2]=p[0];b[3]=p[3];
+            }
+            compositeBitmap_=std::make_unique<gd::Bitmap>(pixels->width,pixels->height,pixels->width*4,PixelFormat32bppARGB,compositeBytes_.data());
+            compositePixels_=pixels;
+        }
+        return *compositeBitmap_;
+    }
+    std::map<fs::path,std::unique_ptr<gd::Bitmap>> images_;
     gd::Bitmap& bitmap(int id,int frame) {
-        auto& image=images_[{id,frame}];
+        const auto& art=assets_.texture(id,frame);
+        auto& image=images_[art.file];
         if (!image) {
-            const auto& art=assets_.texture(id,frame);
             image=std::make_unique<gd::Bitmap>(art.file.c_str());
             if (image->GetLastStatus()!=gd::Ok) throw std::runtime_error("Cannot decode "+art.file.string());
         }
         return *image;
     }
 public:
-    explicit Renderer(const MenuAssets& a):assets_(a) {}
+    explicit Renderer(const MenuAssets& a):assets_(a),compositor_(a,loadWindowsPng) {}
     int hit(const CampaignMenu& menu,const Viewport& viewport,Point physical) {
         auto point=viewport.toStage(physical);
         if (!point) return 0;
@@ -85,10 +102,10 @@ public:
         g.SetPageUnit(gd::UnitPixel);
         if (clear) g.Clear(diagnostic ? gd::Color::Magenta : gd::Color::Black);
         auto pixels=[&](Rect r) {
-            return gd::RectF(float(v.pixels.x+(r.x-Viewport::left)*v.scale),float(v.pixels.y+r.y*v.scale),
-                             float(r.w*v.scale),float(r.h*v.scale));
+            return gd::RectF(float(v.pixels.x+(r.x-Viewport::left)*v.scaleX),float(v.pixels.y+r.y*v.scale),
+                             float(r.w*v.scaleX),float(r.h*v.scale));
         };
-        g.SetClip(pixels({Viewport::left,0,Viewport::width,700}));
+        g.SetClip(pixels({Viewport::left,0,Viewport::width,Viewport::height}));
         g.SetInterpolationMode(gd::InterpolationModeBilinear);
         g.SetPixelOffsetMode(gd::PixelOffsetModeHalf);
         g.SetTextRenderingHint(gd::TextRenderingHintAntiAliasGridFit);
@@ -96,13 +113,13 @@ public:
             auto dst=pixels(d.target);
             if (dst.Y>=h || dst.GetBottom()<=0 || dst.X>=w || dst.GetRight()<=0 ||
                 dst.Width<=0 || dst.Height<=0) continue;
-            if (!d.symbol) {
+            if (!d.symbol && !d.children) {
                 const gd::Color color(BYTE(std::lround(d.alpha*255)),BYTE(d.color>>16),BYTE(d.color>>8),BYTE(d.color));
                 gd::SolidBrush field(color);
                 switch (d.kind) {
                 case Draw::Kind::Polygon: case Draw::Kind::Line: {
                     std::vector<gd::PointF> points;
-                    for (auto p:d.vertices) points.emplace_back(float(dst.X+p.x*v.scale),float(dst.Y+p.y*v.scale));
+                    for (auto p:d.vertices) points.emplace_back(float(dst.X+p.x*v.scaleX),float(dst.Y+p.y*v.scale));
                     if (d.kind==Draw::Kind::Line && points.size()>=2) {
                         gd::Pen pen(color,float(d.lineWidth*v.scale));
                         g.DrawLines(&pen,points.data(),int(points.size()));
@@ -125,7 +142,7 @@ public:
                 }
                 continue;
             }
-            auto& img=bitmap(d.symbol,d.frame);
+            auto& img=d.children ? composite(d) : bitmap(d.symbol,d.frame);
             gd::ImageAttributes attributes;
             attributes.SetWrapMode(gd::WrapModeTileFlipXY);
             if (d.alpha<1 || d.redOffset) {
@@ -142,7 +159,9 @@ public:
                 if (d.mirrored) g.ScaleTransform(-1,1);
                 dst.X=-dst.Width/2; dst.Y=-dst.Height/2;
             }
-            auto status=g.DrawImage(&img,dst,0,0,float(img.GetWidth()),float(img.GetHeight()),gd::UnitPixel,&attributes);
+            const auto source=d.source.value_or(Rect{0,0,1,1});
+            auto status=g.DrawImage(&img,dst,float(source.x*img.GetWidth()),float(source.y*img.GetHeight()),
+                float(source.w*img.GetWidth()),float(source.h*img.GetHeight()),gd::UnitPixel,&attributes);
             g.Restore(state);
             if (status!=gd::Ok)
                 throw std::runtime_error("Unable to draw original art");
@@ -167,6 +186,7 @@ class Window {
     CampaignMenu menu_;
     PauseMenu pause_{assets_};
     bool pauseButtonDown_{};
+    bool pcButtonDown_{},cursorConfined_{};
     WindowsAudio soundPlayer_;
     std::unique_ptr<CampaignTutorial> tutorial_;
     std::unique_ptr<CampaignIntermission> intermission_;
@@ -204,7 +224,7 @@ class Window {
         pause_.setOpen(open); pauseButtonDown_=false;
         mouse_={-1,-1};
         if (GetCapture()==hwnd_) ReleaseCapture();
-        if (tutorial_) {tutorial_->release({}); tutorial_->point({});}
+        if (tutorial_) {tutorial_->pcPressed(false);tutorial_->release({}); tutorial_->point({});}
         SetCursor(LoadCursorW(nullptr,IDC_ARROW));
         soundPlayer_.setPaused(tutorial_ && (open || display_.isOpen()));
         gameDeadline_=Clock::now()+gameInterval;
@@ -478,6 +498,7 @@ class Window {
         g.DrawImage(&studioLogo_,gd::RectF(cx-logoWidth/2,top+lineHeight+gap,logoWidth,logoHeight));
     }
     std::vector<Draw> scene() const {
+        RECT client{};GetClientRect(hwnd_,&client);display_.configureViewport(client.right,client.bottom);
         std::vector<Draw> draws;
         if (!showingNotice_) {
             if (unfinished_) draws=unfinished_->drawList();
@@ -550,6 +571,7 @@ class Window {
         }
     }
     void showDisplay(bool open) {
+        if(open) {ClipCursor(nullptr);cursorConfined_=false;}
         logEvent(std::string("DISPLAY menu=")+(open ? "open" : "closed"));
         if (GetCapture()==hwnd_) ReleaseCapture();
         mouse_={-1,-1};
@@ -584,6 +606,18 @@ class Window {
         const bool custom=tutorial_ && !display_.isOpen() && !pause_.isOpen() && tutorial_->cursorSymbol();
         SetCursor(custom ? nullptr : LoadCursorW(nullptr,IDC_ARROW));
     }
+    void updateCursorLock() {
+        const bool confine=display_.mouseLock() && tutorial_ && !tutorial_->ended() &&
+            !showingNotice_ && !display_.isOpen() && !pause_.isOpen() &&
+            GetForegroundWindow()==hwnd_ && !IsIconic(hwnd_);
+        if(confine) {
+            RECT client{};GetClientRect(hwnd_,&client);const Viewport v(client.right,client.bottom);
+            POINT first{LONG(std::ceil(v.pixels.x)),LONG(std::ceil(v.pixels.y))};
+            POINT last{LONG(std::floor(v.pixels.x+v.pixels.w)),LONG(std::floor(v.pixels.y+v.pixels.h))};
+            ClientToScreen(hwnd_,&first);ClientToScreen(hwnd_,&last);
+            RECT limits{first.x,first.y,last.x,last.y};ClipCursor(&limits);cursorConfined_=true;
+        } else if(cursorConfined_) {ClipCursor(nullptr);cursorConfined_=false;}
+    }
     LRESULT message(UINT msg,WPARAM w,LPARAM l) {
         switch (msg) {
         case WM_ERASEBKGND: return 1;
@@ -594,9 +628,10 @@ class Window {
             }
             break;
         case WM_KILLFOCUS: case WM_CANCELMODE:
+            ClipCursor(nullptr);cursorConfined_=false;pcButtonDown_=false;
             pauseButtonDown_=false; pause_.cancelPress();
             mouse_={-1,-1};
-            if (tutorial_) {tutorial_->release({}); tutorial_->point({});}
+            if (tutorial_) {tutorial_->pcPressed(false);tutorial_->release({}); tutorial_->point({});}
             if (GetCapture()==hwnd_) ReleaseCapture();
             return 0;
         case WM_PAINT: paint(); return 0;
@@ -641,7 +676,13 @@ class Window {
                 (int(menu_.music() && soundPlayer_.musicEnabled())<<3);
         case WM_APP+22:
             return capturePath_.empty() || !tutorial_ ? -1 : tutorial_->ticks();
-        case WM_SIZE: InvalidateRect(hwnd_,nullptr,FALSE); return 0;
+        case WM_APP+23: return capturePath_.empty() ? 0 : LRESULT(std::lround(Viewport::width*100));
+        case WM_APP+24: return capturePath_.empty() ? 0 : LRESULT(std::lround(Viewport::height*100));
+        case WM_APP+25: return capturePath_.empty() ? 0 : int(cursorConfined_);
+        case WM_SIZE: {
+            RECT client{};GetClientRect(hwnd_,&client);display_.configureViewport(client.right,client.bottom);
+            updateCursorLock();InvalidateRect(hwnd_,nullptr,FALSE);return 0;
+        }
         case WM_POWERBROADCAST:
             if (w==PBT_APMRESUMEAUTOMATIC && !showingNotice_) gameDeadline_=Clock::now()+gameInterval;
             return TRUE;
@@ -660,6 +701,7 @@ class Window {
         }
         case WM_MOUSEMOVE: case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_RBUTTONDOWN: {
             mouse_={double(GET_X_LPARAM(l)),double(GET_Y_LPARAM(l))};
+            RECT actual{};GetClientRect(hwnd_,&actual);display_.configureViewport(actual.right,actual.bottom);
             if (display_.isOpen()) {
                 RECT r{}; GetClientRect(hwnd_,&r);
                 display_.pointer(hwnd_,msg,Viewport(r.right,r.bottom).toStage(mouse_));
@@ -702,7 +744,14 @@ class Window {
             }
             if (tutorial_) {
                 RECT r{}; GetClientRect(hwnd_,&r);
-                auto stage=Viewport(r.right,r.bottom).toStage(mouse_);
+                auto stage=Viewport::battlePoint(Viewport(r.right,r.bottom).toStage(mouse_));
+                const Rect pcButton{320,674,48,22};
+                if(!tutorial_->ended() && msg==WM_LBUTTONDOWN && stage && pcButton.contains(*stage)) {
+                    pcButtonDown_=true;tutorial_->pcPressed(true);SetCapture(hwnd_);return 0;
+                }
+                if(msg==WM_LBUTTONUP && pcButtonDown_) {
+                    pcButtonDown_=false;tutorial_->pcPressed(false);ReleaseCapture();if(stage && pcButton.contains(*stage)) showDisplay(true);return 0;
+                }
                 const Rect pauseButton{482,674,50,22};
                 if (!tutorial_->ended() && msg==WM_LBUTTONDOWN && stage && pauseButton.contains(*stage)) {
                     pauseButtonDown_=true; SetCapture(hwnd_); return 0;
@@ -775,7 +824,7 @@ class Window {
             }
             return 0;
         }
-        case WM_DESTROY: saveOptions(); logEvent("SHUTDOWN window closed"); PostQuitMessage(0); return 0;
+        case WM_DESTROY: ClipCursor(nullptr);saveOptions(); logEvent("SHUTDOWN window closed"); PostQuitMessage(0); return 0;
         }
         return DefWindowProcW(hwnd_,msg,w,l);
     }
@@ -808,6 +857,7 @@ class Window {
                 DispatchMessageW(&msg);
             }
 
+            RECT client{};GetClientRect(hwnd_,&client);display_.configureViewport(client.right,client.bottom);updateCursorLock();
             advanceSimulation(Clock::now());
             const auto now=Clock::now();
             if (now>=gameDeadline_) continue;

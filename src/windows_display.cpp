@@ -12,7 +12,9 @@ using sw2::Rect;
 using sw2::Viewport;
 
 namespace {
-constexpr Rect panel{193,120,464,512};
+constexpr Rect panel{193,120,464,578};
+constexpr auto aspects=std::array{"16:9","Stretched","Dynamic [Experimental]"};
+constexpr auto aspectNames=std::array{"16:9","stretched","dynamic"};
 constexpr auto modes=std::array{"Windowed","Borderless Window","Fullscreen"};
 struct Rate { int fps; const char* label; };
 constexpr Rate rates[]={{30,"30"},{60,"60"},{120,"120"},{240,"240"},{0,"Unlimited"}};
@@ -22,8 +24,10 @@ constexpr Resolution resolutions[]={{0,0,"Auto"},{1280,720,"1280 x 720"},{1600,9
 constexpr int resolutionCount=int(std::size(resolutions));
 constexpr int modeCount=int(modes.size()),rateCount=int(std::size(rates));
 constexpr int syncChoice=modeCount+rateCount,counterChoice=syncChoice+1,
-    resolutionChoice=counterChoice+1,choiceCount=resolutionChoice+1;
+    resolutionChoice=counterChoice+1,mouseChoice=resolutionChoice+1,aspectChoice=mouseChoice+1,choiceCount=aspectChoice+1;
 constexpr Rect choiceBounds(int i) {
+    if(i==mouseChoice) return {219,585,412,34};
+    if(i==aspectChoice) return {219,627,412,34};
     if (i==resolutionChoice) return {219,185,412,30};
     if (i<modeCount) return {219,220.+57*i,412,45};
     if (i==syncChoice) return {219,485,412,44};
@@ -42,7 +46,7 @@ std::string DisplaySettings::optionsText() const {
     out<<"[Display]\nmode="<<names[int(mode_)]<<"\nresolution=";
     if (!resolutionChoice_) out<<"auto";
     else out<<resolution.width<<'x'<<resolution.height;
-    out<<"\nfps_limit="<<frameLimit()<<"\nvsync="<<int(vsync_)<<"\nshow_fps="<<int(showFps_)<<'\n';
+    out<<"\nfps_limit="<<frameLimit()<<"\nvsync="<<int(vsync_)<<"\nshow_fps="<<int(showFps_)<<"\nmouse_lock="<<int(mouseLock_)<<"\naspect_mode="<<aspectNames[aspectChoice_]<<'\n';
     return out.str();
 }
 
@@ -72,7 +76,10 @@ bool DisplaySettings::loadOptions(const std::filesystem::path& path) {
                 if (value==name) {resolutionChoice_=resolutionFocus_=i;found=true;break;}
             }
             if (!found) valid=false;
-        } else if (key=="fps_limit" || key=="vsync" || key=="show_fps") {
+        } else if(key=="aspect_mode") {
+            bool found=false;for(int i=0;i<3;++i) if(value==aspectNames[i]) {aspectChoice_=i;found=true;}
+            if(!found) valid=false;
+        } else if (key=="fps_limit" || key=="vsync" || key=="show_fps" || key=="mouse_lock") {
             int number{};const auto parsed=std::from_chars(value.data(),value.data()+value.size(),number);
             if (parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size()) {valid=false;continue;}
             if (key=="fps_limit") {
@@ -81,7 +88,8 @@ bool DisplaySettings::loadOptions(const std::filesystem::path& path) {
                 if (!found) valid=false;
             } else if (number!=0 && number!=1) valid=false;
             else if (key=="vsync") vsync_=number!=0;
-            else showFps_=number!=0;
+            else if(key=="show_fps") showFps_=number!=0;
+            else mouseLock_=number!=0;
         }
     }
     return valid && !input.bad();
@@ -109,7 +117,7 @@ std::pair<int,int> DisplaySettings::renderSize(int width,int height) const {
     if (!resolutionChoice_ || width<=0 || height<=0) return {width,height};
     // Include letterbox pixels in the buffer so presentation to the HWND stays
     // uniform even when its client area is not 16:9. Input still uses the client.
-    const double viewHeight=std::min(double(height),width*9./16.);
+    const double viewHeight=aspectChoice_==0 ? std::min(double(height),width*9./16.) : height;
     const double scale=std::min({resolutions[resolutionChoice_].height/viewHeight,
                               8192./width,8192./height});
     return {std::max(1,int(std::lround(width*scale))),std::max(1,int(std::lround(height*scale)))};
@@ -167,14 +175,7 @@ void DisplaySettings::setMode(HWND hwnd,Mode next) {
     }
     MONITORINFO monitor{sizeof(MONITORINFO)};
     GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&monitor);
-    RECT r=next==Mode::Fullscreen ? monitor.rcMonitor : monitor.rcWork;
-    if (next==Mode::Borderless) {
-        const LONG units=std::min((r.right-r.left)/16,(r.bottom-r.top)/9);
-        r.left+=(r.right-r.left-16*units)/2;
-        r.top+=(r.bottom-r.top-9*units)/2;
-        r.right=r.left+16*units;
-        r.bottom=r.top+9*units;
-    }
+    RECT r=monitor.rcMonitor;
     SetWindowLongPtrW(hwnd,GWL_STYLE,WS_POPUP|WS_VISIBLE);
     SetWindowPos(hwnd,HWND_TOP,r.left,r.top,r.right-r.left,r.bottom-r.top,SWP_FRAMECHANGED);
 }
@@ -183,6 +184,8 @@ void DisplaySettings::apply(HWND hwnd,int choice) {
     if (choice<modeCount) setMode(hwnd,Mode(choice));
     else if (choice==syncChoice) vsync_=!vsync_;
     else if (choice==counterChoice) showFps_=!showFps_;
+    else if(choice==mouseChoice) mouseLock_=!mouseLock_;
+    else if(choice==aspectChoice) aspectChoice_=(aspectChoice_+1)%3;
     else if (choice==resolutionChoice) applyResolution(hwnd,resolutionFocus_);
     else rateChoice_=choice-modeCount;
 }
@@ -190,7 +193,9 @@ void DisplaySettings::apply(HWND hwnd,int choice) {
 void DisplaySettings::key(HWND hwnd,WPARAM key) {
     switch (key) {
     case VK_DOWN:
-        if (focused_==counterChoice) focused_=resolutionChoice;
+        if (focused_==counterChoice) focused_=mouseChoice;
+        else if(focused_==mouseChoice) focused_=aspectChoice;
+        else if(focused_==aspectChoice) focused_=resolutionChoice;
         else if (focused_==resolutionChoice) focused_=0;
         else if (focused_==syncChoice) focused_=counterChoice;
         else if (focused_>=modeCount) focused_=syncChoice;
@@ -199,13 +204,16 @@ void DisplaySettings::key(HWND hwnd,WPARAM key) {
         break;
     case VK_UP:
         if (focused_==0) focused_=resolutionChoice;
-        else if (focused_==resolutionChoice) focused_=counterChoice;
+        else if (focused_==resolutionChoice) focused_=aspectChoice;
+        else if(focused_==aspectChoice) focused_=mouseChoice;
+        else if(focused_==mouseChoice) focused_=counterChoice;
         else if (focused_==counterChoice) focused_=syncChoice;
         else if (focused_==syncChoice) focused_=modeCount+rateChoice_;
         else focused_=std::min(focused_-1,modeCount-1);
         break;
     case VK_LEFT: case VK_RIGHT:
-        if (focused_==resolutionChoice) {
+        if(focused_==aspectChoice) aspectChoice_=(aspectChoice_+(key==VK_LEFT ? -1 : 1)+3)%3;
+        else if (focused_==resolutionChoice) {
             resolutionFocus_=(resolutionFocus_+(key==VK_LEFT ? -1 : 1)+resolutionCount)%resolutionCount;
         } else if (focused_>=modeCount && focused_<syncChoice) {
             const int direction=key==VK_LEFT ? -1 : 1;
@@ -295,11 +303,18 @@ void DisplaySettings::append(std::vector<Draw>& draws) const {
     draws.push_back(Draw::label({233,548,270,24},"Show FPS",18,0xf5f6f9));
     draws.push_back(Draw::shape(Kind::Box,{555,544,66,30},showFps_ ? 0x654515 : 0x100c05));
     draws.push_back(Draw::label({555,550,66,20},showFps_ ? "On" : "Off",14,showFps_ ? 0xffd992 : 0xbfc6d0,true));
-    draws.push_back(Draw::label({219,601,412,22},"16:9  |  Insert or Esc to close",14,0xbfc6d0));
+    const auto mouse=choiceBounds(mouseChoice),aspect=choiceBounds(aspectChoice);
+    draws.push_back(Draw::shape(Kind::Box,mouse,focused_==mouseChoice ? 0x523b1c : 0x2a1d0e));
+    draws.push_back(Draw::label({233,592,270,22},"Lock mouse to game",16,0xf5f6f9));
+    draws.push_back(Draw::label({555,592,66,22},mouseLock_ ? "On" : "Off",14,0xffd992,true));
+    draws.push_back(Draw::shape(Kind::Box,aspect,focused_==aspectChoice ? 0x523b1c : 0x2a1d0e));
+    draws.push_back(Draw::label({233,635,120,22},"Aspect mode",16,0xf5f6f9));
+    draws.push_back(Draw::label({355,635,265,22},aspects[aspectChoice_],14,0xffd992,true));
+    draws.push_back(Draw::label({219,673,412,22},"Insert or Esc to close",14,0xbfc6d0));
 }
 
 void DisplaySettings::resize(HWND hwnd,WPARAM edge,RECT& outer) const {
-    if (mode_!=Mode::Windowed) return;
+    if (mode_!=Mode::Windowed || aspectChoice_!=0) return;
     RECT border{};
     AdjustWindowRectExForDpi(&border,DWORD(GetWindowLongPtrW(hwnd,GWL_STYLE)),FALSE,
                              DWORD(GetWindowLongPtrW(hwnd,GWL_EXSTYLE)),GetDpiForWindow(hwnd));

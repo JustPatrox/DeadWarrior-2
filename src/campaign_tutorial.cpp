@@ -39,6 +39,24 @@ CampaignTutorial::CampaignTutorial(const MenuAssets& art,const std::filesystem::
     while (markers>>id>>frame>>key>>tip.x>>tip.y) if (key=="tip") tips_[{id,frame}]=tip;
     if (!rules.eof() || !poses.eof() || !markers.eof() || messages_.empty())
         throw std::runtime_error("Invalid tutorial manifest");
+    std::ifstream descriptions(dir.parent_path()/"tooltips"/"tooltips.tsv");
+    for(std::string line;std::getline(descriptions,line);) {
+        std::istringstream fields(line);int symbol;Tooltip tooltip;
+        if(fields>>symbol>>tooltip.frame>>tooltip.delay) tooltips_[symbol]=tooltip;
+    }
+    std::ifstream castle(dir.parent_path()/"interface"/"castle.tsv");
+    CastlePart part;
+    while(castle>>part.symbol>>part.origin.x>>part.origin.y>>part.hit.x>>part.hit.y>>part.hit.w>>part.hit.h)
+        castleParts_.push_back(part);
+    std::ifstream castleMasks(dir.parent_path()/"interface/castle-masks.tsv");Rect span;int castleOwner;
+    while(castleMasks>>castleOwner>>span.x>>span.y>>span.w>>span.h) castleMasks_[castleOwner].push_back(span);
+    std::ifstream castleFrames(dir.parent_path()/"castle"/"states.tsv");
+    CastleLayer castleLayer;
+    std::string blend;
+    while(castleFrames>>castleLayer.owner>>castleLayer.state>>castleLayer.depth>>castleLayer.base>>castleLayer.prefix>>castleLayer.period>>castleLayer.length>>blend) {
+        castleLayer.blend=blend=="add" ? Draw::Blend::Add : blend=="overlay" ? Draw::Blend::Overlay : blend=="screen" ? Draw::Blend::Screen : Draw::Blend::Normal;
+        castleLayers_.push_back(castleLayer);
+    }
     std::ifstream masks(dir/"control-masks.tsv");
     double y{},left{},right{};
     while (masks>>key>>y>>left>>right) controlMasks_[key].push_back({left,y,right-left,1});
@@ -152,7 +170,7 @@ Point CampaignTutorial::workMiner(Unit& u) {
         return {(home-u.position.x)/20,std::abs(dy)<40 ? 0 : dy/20};
     }
     if (!praying && !oreRemaining_[u.resource]) {
-        u.resource=-2; u.miningSlot=-1; u.order=Order::Stand; animate(u,"stand"); return {};
+        u.resource=-2; u.miningSlot=-1; u.order=Order::Stand; animate(u,"stand");assignFreeMine(u);return {};
     }
     const double dx=ore.x+direction*(praying ? -50 : (2*u.miningSlot-1)*50)-u.position.x;
     const double dy=ore.y+(praying ? (rules_.at("maxWorshipers")-u.miningSlot)*20-50 : 0)-u.position.y;
@@ -284,7 +302,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
                     u.lastVictim=u.target; u.lastHitTick=ticks_;
                     if (u.cloakTicks && !statue && !wall) {
                         damage+=stat(u,stat(target,"armoured") ? "stealth.damageToArmour" : "stealth.damageToNotArmour");
-                        if (target.poison<stat(u,"stealth.poison")) sound("PoisonedSound",target.position);
+                        if (target.poison<stat(u,"stealth.poison")) {sound("PoisonedSound",target.position);++poisonHits_;}
                         target.poison=std::max(target.poison,stat(u,"stealth.poison"));
                     }
                     u.cloakTicks=0;
@@ -311,6 +329,11 @@ void CampaignTutorial::updateUnit(Unit& u) {
         u.velocity.x=0;
     if (nextY<0 || nextY>depth_) u.velocity.y=0;
     u.position.x+=u.velocity.x; u.position.y+=u.velocity.y;
+    if(mission_ && isWorker(u.symbol) && u.resource==-2 && u.engageOnMove &&
+       u.order==Order::Move && std::hypot(u.goal.x-u.position.x,u.goal.y-u.position.y)<40) assignFreeMine(u);
+    if(u.order==Order::Move && !u.garrisoned && !isWorker(u.symbol) &&
+       std::hypot(u.goal.x-u.position.x,u.goal.y-u.position.y)<8 &&
+       std::hypot(u.velocity.x,u.velocity.y)<.3) {u.order=Order::Stand;u.engageOnMove=true;}
     const int end=animations_.at({u.symbol,u.pose}).length;
     u.frame=u.frame>=end ? 2 : u.frame+1;
     if (mission_ && u.symbol==sword && attacking && u.rageCounter<rules_.at("rage.effect"))
@@ -378,6 +401,19 @@ void CampaignTutorial::press(Point p) {
     if (step_==Step::Free && std::hypot(p.x-550.6,p.y-584.6)<=16.6) {
         fastForward_=!fastForward_; return;
     }
+    if (p.y<575 && (mission_ || step_>=Step::Range)) {
+        const Point local{p.x+camera_,p.y};
+        const bool troop=std::any_of(units_.begin(),units_.end(),[&](const Unit& u){
+            return !u.enemy && u.hp>0 && std::abs(local.x-u.position.x)<u.width*scale(u)/2 &&
+                p.y<=battlefieldY_+u.position.y && p.y>battlefieldY_+u.position.y-u.height*scale(u);
+        });
+        if(troop) {dragStart_=p;updateSelection(p);return;}
+        if(!troop) for(const auto& part:castleParts_) if(castleHit(part,local)) {
+            selectedBuilding_=part.symbol;pressedCastle_=part.symbol;rangeSelected_=part.symbol==1865;
+            for(auto& u:units_) u.selected=false;
+            sound("MouseoverStructure",{},false);return;
+        }
+    }
     if (defencePress(p)) return;
     const bool unitSelected=std::any_of(units_.begin(),units_.end(),[](const Unit& u){return u.selected && !u.enemy && u.hp>0;});
     if (unitSelected && sprite(2311,1,{813,642}).target.contains(p)) {
@@ -417,6 +453,8 @@ void CampaignTutorial::press(Point p) {
     mapDown_=minimap.contains(p);
     if (mapDown_) { point(p); return; }
     if (productionPress(p)) return;
+    if (Rect{309,648,94,25}.contains(p)) {minerOrder(true);return;}
+    if (Rect{444,648,94,25}.contains(p)) {minerOrder(false);return;}
     if (p.y>=575) {
         if (Rect{482,674,50,22}.contains(p)) unavailableControl_="HUD.menuButton symbol=10084";
         else if (Rect{320,674,48,22}.contains(p)) unavailableControl_="HUD.highButton symbol=10102";
@@ -438,6 +476,7 @@ void CampaignTutorial::release(std::optional<Point> p) {
     point(p); dragStart_.reset(); mapDown_=false;
 }
 void CampaignTutorial::updateSelection(Point point) {
+    rangeSelected_=false;selectedBuilding_=0;
     const auto box=between(*dragStart_,point);
     for (auto& u:units_) {
         if (u.enemy || u.hp<=0) continue;
@@ -500,6 +539,14 @@ std::string CampaignTutorial::takeVoice() { return std::exchange(nextVoice_,{});
 std::string CampaignTutorial::takeUnavailableControl() {return std::exchange(unavailableControl_,{});}
 void CampaignTutorial::tick() {
     ++ticks_;
+    for(const auto& part:castleParts_) {
+        const bool hover=cursor_ && castleHit(part,{cursor_->x+camera_,cursor_->y});
+        const int state=hover ? (pressedCastle_==part.symbol ? 3 : 2) : 1;
+        auto& [last,start]=castleState_[part.symbol];
+        if(last!=state) {last=state;start=ticks_;}
+    }
+    pressedCastle_=0;
+    updateTooltip();
     for (auto& mark:clickMarkers_) ++mark.frame;
     std::erase_if(clickMarkers_,[&](const ClickMarker& mark){return mark.frame>cursorFrames_.at(2310);});
     if (step_>=Step::Victory) { tickOutcome(); return; }
@@ -605,8 +652,11 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         if (symbol==4094) {
             // Desert's flat sky includes one moon near its right edge.
             // Continue its authored color without reflecting a second moon.
-            out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::right-Viewport::left,700},0x2d2d4b));
+            out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::width,Viewport::height},0x2d2d4b));
             out.push_back(sprite(symbol,1,{-offset,0}));
+        } else if(symbol==backgroundLayers_.front() || symbol==backgroundLayers_.back()) {
+            auto image=sprite(symbol,1,{-offset,0});
+            coverBackdrop(out,image,{Viewport::left,image.target.y,Viewport::width,Viewport::height-image.target.y});
         } else for (int plate:{2,3,1}) out.push_back(sprite(symbol,plate,{-offset,0}));
     }
     std::vector<std::pair<double,Draw>> layers;
@@ -616,7 +666,19 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         const double x=home-camera_;
         const bool chaos=mirror && chaosOpponent_;
         layers.emplace_back(-battlefieldY_,sprite(chaos ? 2318 : 1872,1,{chaos ? x+legacyWidth : x,0},1,mirror));
-        layers.emplace_back(0,sprite(chaos ? 2423 : 1866,1,{x-direction*legacyWidth,0},1,mirror));
+        if(!chaos && !mirror && !castleLayers_.empty()) {
+            std::vector<Draw> castle{sprite(1866,10001,{0,0})};
+            for(const auto& part:castleParts_) {
+                const auto found=castleState_.find(part.symbol);
+                const int state=found==castleState_.end() ? 1 : found->second.first;
+                const int age=found==castleState_.end() ? 0 : ticks_-found->second.second;
+                for(const auto& child:castleLayers_) if(child.owner==part.symbol && child.state==state) {
+                    const int frame=age<child.length ? age : child.prefix+(age-child.prefix)%child.period;
+                    auto d=sprite(part.symbol,child.base+1+frame,part.origin);d.blend=child.blend;castle.push_back(std::move(d));
+                }
+            }
+            layers.emplace_back(0,Draw::group(std::move(castle),{-camera_,0}));
+        } else layers.emplace_back(0,sprite(chaos ? 2423 : 1866,1,{x-direction*legacyWidth,0},1,mirror));
         layers.emplace_back(depth_/2+40,sprite(chaos ? 2426 : 1621,1,{chaos ? x+legacyWidth : x,0},1,mirror));
         const double statueX=x+direction*500,statueY=battlefieldY_+depth_/2;
         // Statue.init first scales _statueMc to .8. Team.init scales the
@@ -647,6 +709,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         layers.emplace_back(p.y+3,sprite(1051,1,{p.x-camera_,battlefieldY_+p.y+3},size));
     }
     for (const auto& u:units_) {
+        if (!visible(u)) continue;
         if (u.symbol==bomber && u.deadCounted) continue;
         const double size=scale(u),x=u.position.x-camera_,y=battlefieldY_+u.position.y;
         const auto& seq=animations_.at({u.symbol,u.pose});
@@ -702,17 +765,27 @@ std::vector<Draw> CampaignTutorial::drawList() const {
     drawMagic(layers);
     std::stable_sort(layers.begin(),layers.end(),[](const auto& a,const auto& b){return a.first<b.first;});
     for (auto& item:layers) out.push_back(std::move(item.second));
-    double vision=legacyWidth;
-    for (auto& u:units_) if (!u.enemy && u.hp>0) vision=std::max(vision,u.position.x);
-    vision=std::min(length_,vision+rules_.at("visionSize"));
+    double vision=visionBoundary();
     auto fog=sprite(1595,1,{std::max(vision-camera_,Viewport::left),0});
-    if (cinematic_<0 && step_!=Step::Enemy && step_<Step::Victory) { fog.alpha=.7; out.push_back(std::move(fog)); }
+    if (cinematic_<0 && step_!=Step::Enemy && step_<Step::Victory) {
+        fog.alpha=.7;fog.target.h=Viewport::height;
+        const double edge=fog.target.x+fog.target.w;
+        out.push_back(std::move(fog));
+        if(edge<Viewport::right) out.push_back(Draw::shape(Draw::Kind::Box,{edge,0,Viewport::right-edge,Viewport::height},0,.7));
+    }
     if (dragStart_ && cursor_) {
         const Rect box=between(*dragStart_,*cursor_);
         out.push_back(Draw::shape(Draw::Kind::Box,box,0x00ff00,.2));
         out.push_back(Draw::shape(Draw::Kind::Outline,box,0x00ff00,.75));
     }
-    out.push_back(sprite(10118,1,{0,0}));
+    // CampaignGameScreen places UserInterface above StickWar.tipBox.
+    drawTooltips(out);
+    const auto hudStart=out.size();
+    out.push_back(sprite(10118,art_.art.contains({10118,10001}) ? 10001 : 1,{0,0}));
+    if(art_.art.contains({10102,60001})) {
+        const bool hover=cursor_ && Rect{320,674,48,22}.contains(*cursor_);
+        out.push_back(sprite(10102,60000+(hover ? pcPressed_ ? 3 : 2 : 1),{344,683.5}));
+    }
     if (step_==Step::Free && cinematic_<0) out.push_back(sprite(10094,fastForward_ ? 2 : 1,{530,568}));
     drawProduction(out);
     auto dot=[&](Point p,unsigned color) {
@@ -724,7 +797,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         out.push_back(Draw::shape(Draw::Kind::Box,{minimap.x+statueX/length_*minimap.w-2,
                                   minimap.y+minimap.h/2-2,5,5},0x666666));
     }
-    for (auto& u:units_) if (u.hp>0) dot(u.position,u.enemy ? 0xff0000 : u.selected ? 0x00ff00 : 0);
+    for (auto& u:units_) if (u.hp>0 && visible(u)) dot(u.position,u.enemy ? 0xff0000 : u.selected ? 0x00ff00 : 0);
     const double visibleLeft=std::max(0.,camera_+Viewport::left);
     const double visibleRight=std::min(length_,camera_+Viewport::right);
     out.push_back(Draw::shape(Draw::Kind::Outline,{minimap.x+visibleLeft/length_*minimap.w,
@@ -763,14 +836,15 @@ std::vector<Draw> CampaignTutorial::drawList() const {
             if (upgrades_[8]) out.push_back(sprite(8783,1,{744,606}));
         }
     }
+    for(size_t i=hudStart;i<out.size();++i) out[i].target.y+=Viewport::height-700;
     const double economyX=Viewport::right-329;
     out.push_back(sprite(9726,1,{economyX,-2.25}));
     out.push_back(Draw::label({economyX+57,11,56,22},std::to_string(goldBalance_),12,0xffffff));
     out.push_back(Draw::label({economyX+175,11,56,22},std::to_string(mana_),12,0xffffff));
     out.push_back(Draw::label({economyX+284,11,56,22},std::to_string(population_),12,0xffffff));
     auto digits=[](int v){return std::to_string(v/10)+" "+std::to_string(v%10);};
-    out.push_back(Draw::label({378,673,46,26},digits(ticks_/1800),19,0xff0000,true));
-    out.push_back(Draw::label({433,673,46,26},digits(ticks_/30%60),19,0xff0000,true));
+    out.push_back(Draw::label({378,Viewport::height-27,46,26},digits(ticks_/1800),19,0xff0000,true));
+    out.push_back(Draw::label({433,Viewport::height-27,46,26},digits(ticks_/30%60),19,0xff0000,true));
     if (mission_ && hint_ && hintTicks_<(hint_==1 ? 300 : hint_==3 ? 152 : 225)) {
         const double scale=hint_==1 ? .9 : 1.3;
         const Point at=hint_==1 ? Point{630,510} : Point{425,100};
@@ -832,7 +906,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         const double x=425+slide,y=100+525*.8;
         out.push_back(sprite(10139,1,{x,y},.8));
         const char* hint=step_==Step::AttackHint ? "When you're ready, click here to Attack the enemy!" :
-                            "Click here to toggle the graphics quality if the game is running slow for you.";
+                            "Click PC to open display, performance, and mouse options.";
         out.push_back(Draw::label({x-159,y-31.5,318,80},hint,14,0xffffff,true));
         if (slide<1) out.push_back(sprite(1924,1+ticks_%32,step_==Step::AttackHint ? Point{515,625} : Point{335,680}));
     }

@@ -1,9 +1,11 @@
 #pragma once
 
 #include "campaign_menu.hpp"
+#include "raster_compositor.hpp"
 
 #include <windows.h>
 #include <memory>
+sw2::Raster loadWindowsPng(const std::filesystem::path&);
 
 // Device resources belong to the HWND. Off-screen captures and the software
 // fallback use the separate GDI+ renderer.

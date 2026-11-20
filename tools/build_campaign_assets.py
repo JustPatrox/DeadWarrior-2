@@ -289,7 +289,9 @@ def tutorial_art(c,level,refresh_ui=False):
     with (c.directory/"rules.tsv").open("w") as f:
         f.write(f"campaign.points\t{level.get('points')}\n")
         for name in ("frontScale","backScale","battlefieldHeight","battlefieldY","goldAtStartOfMap",
-                     "screenScrollSpeed","screenScrollGain","visionSize","maxWorshipers","gravity","populationLimit"):
+                     "screenScrollSpeed","screenScrollGain","visionSize","maxWorshipers","gravity","populationLimit",
+                     "garrisonHealRate","passiveIncome","passiveMana","passiveIncomeUpgraded1","passiveIncomeUpgraded2",
+                     "passiveIncomeUpgraded3","passiveManaUpgraded1","passiveManaUpgraded2","passiveManaUpgraded3"):
             f.write(f"{name}\t{data.findtext(name)}\n")
         for unit in ("swordwrath","spearton","miner","archer"):
             for field in data.find("Order/Units/"+unit):

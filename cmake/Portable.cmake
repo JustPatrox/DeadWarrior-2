@@ -1,4 +1,8 @@
 include(FetchContent)
+if(MSVC)
+    # SDL and the frontend must use the same static runtime on Windows.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 set(DW2_RELEASE_VERSION "development" CACHE STRING "Release identification")
 set(DW2_BUNDLE_BUILD "0" CACHE STRING "Numeric app bundle build")
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)

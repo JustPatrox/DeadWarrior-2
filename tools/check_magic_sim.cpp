@@ -27,7 +27,7 @@ int main(int argc,char** argv) {
         for (int i=0;i<24000 && !scene.ended();++i) {
             if (i>6500 && i%360==0) {
                 click({56,665}); click({88,610}); click({500,634});
-                scene.press({-190,240}); scene.point(Point{1040,570}); scene.release(Point{1040,570});
+                scene.selectArmy();
                 scene.unitAbility(); scene.unitAbility();
             }
             scene.tick();
@@ -50,7 +50,7 @@ int main(int argc,char** argv) {
         for (int i=0;i<10000 && !attack.ended();++i) {
             if (i>1500 && i%360==0) {
                 order({56,665}); order({88,610}); order({500,634});
-                attack.press({-190,240}); attack.point(Point{1040,570}); attack.release(Point{1040,570});
+                attack.selectArmy();
                 const int mana=attack.battleStatus().mana;
                 attack.unitAbility(); attack.unitAbility();
                 if (i==1800) require(attack.battleStatus().mana==mana-20,"Cloak charged the wrong mana or ignored its cooldown");

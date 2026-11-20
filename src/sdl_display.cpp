@@ -6,7 +6,9 @@
 
 namespace sw2 {
 namespace {
-constexpr Rect panel{193,120,464,512};
+constexpr Rect panel{193,120,464,578};
+constexpr auto aspects=std::array{"16:9","Stretched","Dynamic [Experimental]"};
+constexpr auto aspectNames=std::array{"16:9","stretched","dynamic"};
 constexpr auto modes=std::array{"Windowed","Borderless Window","Fullscreen"};
 struct Rate { int fps; const char* label; };
 constexpr Rate rates[]={{30,"30"},{60,"60"},{120,"120"},{240,"240"},{0,"Unlimited"}};
@@ -16,8 +18,10 @@ constexpr Resolution resolutions[]={{0,0,"Auto"},{1280,720,"1280 x 720"},{1600,9
 constexpr int resolutionCount=int(std::size(resolutions));
 constexpr int modeCount=int(modes.size()),rateCount=int(std::size(rates));
 constexpr int syncChoice=modeCount+rateCount,counterChoice=syncChoice+1,
-    resolutionChoice=counterChoice+1,choiceCount=resolutionChoice+1;
+    resolutionChoice=counterChoice+1,mouseChoice=resolutionChoice+1,aspectChoice=mouseChoice+1,choiceCount=aspectChoice+1;
 constexpr Rect choiceBounds(int i) {
+    if(i==mouseChoice) return {219,585,412,34};
+    if(i==aspectChoice) return {219,627,412,34};
     if (i==resolutionChoice) return {219,185,412,30};
     if (i<modeCount) return {219,220.+57*i,412,45};
     if (i==syncChoice) return {219,485,412,44};
@@ -41,8 +45,11 @@ SdlDisplay::SdlDisplay(SDL_Window* window,SDL_Renderer* renderer,const std::file
         else if(key=="fps_limit"&&numeric) {for(int i=0;i<rateCount;++i) {if(number==rates[i].fps) rate_=i;}}
         else if(key=="vsync"&&numeric) vsync_=number==1;
         else if(key=="show_fps"&&numeric) fps_=number==1;
+        else if(key=="mouse_lock"&&numeric) mouseLock_=number==1;
+        else if(key=="aspect_mode") {for(int i=0;i<3;++i) if(value==aspectNames[i]) aspect_=i;}
     }
     SDL_SetRenderVSync(renderer_,vsync_ ? 1 : 0);
+    SDL_SetWindowAspectRatio(window_,aspect_==0 ? 16.f/9 : 0,aspect_==0 ? 16.f/9 : 0);
     if(startup==0&&resolution_>0) apply(resolutionChoice);
     mode(startup);save();
 }
@@ -52,18 +59,16 @@ void SdlDisplay::mode(int next) {
     if(mode_==0) {SDL_GetWindowPosition(window_,&windowed_[0],&windowed_[1]);SDL_GetWindowSize(window_,&windowed_[2],&windowed_[3]);}
     SDL_SetWindowFullscreen(window_,false);
     SDL_SetWindowBordered(window_,next==0);
-    if(next==2) SDL_SetWindowFullscreen(window_,true);
-    else if(next==1) {
-        SDL_Rect area{};SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(window_),&area);
-        const int unit=std::max(1,std::min(area.w/16,area.h/9));
-        SDL_SetWindowSize(window_,unit*16,unit*9);SDL_SetWindowPosition(window_,area.x+(area.w-unit*16)/2,area.y+(area.h-unit*9)/2);
-    } else {SDL_SetWindowSize(window_,windowed_[2],windowed_[3]);SDL_SetWindowPosition(window_,windowed_[0],windowed_[1]);}
+    if(next==2 || next==1) SDL_SetWindowFullscreen(window_,true);
+    else {SDL_SetWindowSize(window_,windowed_[2],windowed_[3]);SDL_SetWindowPosition(window_,windowed_[0],windowed_[1]);}
     mode_=next;focus_=next;
 }
 void SdlDisplay::apply(int choice) {
     if(choice<modeCount) mode(choice);
     else if(choice==syncChoice) {vsync_=!vsync_;SDL_SetRenderVSync(renderer_,vsync_ ? 1 : 0);}
     else if(choice==counterChoice) fps_=!fps_;
+    else if(choice==mouseChoice) mouseLock_=!mouseLock_;
+    else if(choice==aspectChoice) {aspect_=(aspect_+1)%3;SDL_SetWindowAspectRatio(window_,aspect_==0 ? 16.f/9 : 0,aspect_==0 ? 16.f/9 : 0);}
     else if(choice!=resolutionChoice) rate_=choice-modeCount;
     if(choice==resolutionChoice&&mode_==0&&resolution_>0) {
         SDL_Rect area{};SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(window_),&area);
@@ -74,19 +79,24 @@ void SdlDisplay::apply(int choice) {
 }
 void SdlDisplay::key(SDL_Keycode key) {
     if(key==SDLK_DOWN) {
-        if(focus_==counterChoice) focus_=resolutionChoice;
+        if(focus_==counterChoice) focus_=mouseChoice;
+        else if(focus_==mouseChoice) focus_=aspectChoice;
+        else if(focus_==aspectChoice) focus_=resolutionChoice;
         else if(focus_==resolutionChoice) focus_=0;
         else if(focus_==syncChoice) focus_=counterChoice;
         else if(focus_>=modeCount) focus_=syncChoice;
         else if(focus_==modeCount-1) focus_=modeCount+rate_;else ++focus_;
     } else if(key==SDLK_UP) {
         if(focus_==0) focus_=resolutionChoice;
-        else if(focus_==resolutionChoice) focus_=counterChoice;
+        else if(focus_==resolutionChoice) focus_=aspectChoice;
+        else if(focus_==aspectChoice) focus_=mouseChoice;
+        else if(focus_==mouseChoice) focus_=counterChoice;
         else if(focus_==counterChoice) focus_=syncChoice;
         else if(focus_==syncChoice) focus_=modeCount+rate_;else focus_=std::min(focus_-1,modeCount-1);
     } else if(key==SDLK_LEFT||key==SDLK_RIGHT) {
         const int dir=key==SDLK_LEFT ? -1 : 1;
-        if(focus_==resolutionChoice) {resolution_=(resolution_+dir+resolutionCount)%resolutionCount;apply(resolutionChoice);focus_=resolutionChoice;}
+        if(focus_==aspectChoice) {aspect_=(aspect_+dir+3)%3;SDL_SetWindowAspectRatio(window_,aspect_==0 ? 16.f/9 : 0,aspect_==0 ? 16.f/9 : 0);save();}
+        else if(focus_==resolutionChoice) {resolution_=(resolution_+dir+resolutionCount)%resolutionCount;apply(resolutionChoice);focus_=resolutionChoice;}
         else if(focus_>=modeCount&&focus_<syncChoice) focus_=modeCount+(focus_-modeCount+dir+rateCount)%rateCount;
     } else if(key==SDLK_TAB) focus_=(focus_+((SDL_GetModState()&SDL_KMOD_SHIFT) ? -1 : 1)+choiceCount)%choiceCount;
     else if(key==SDLK_HOME) focus_=0;
@@ -106,7 +116,8 @@ void SdlDisplay::pointer(int action,std::optional<Point> point) {
 }
 std::pair<int,int> SdlDisplay::renderSize(int w,int h) const {
     if(!resolution_||w<=0||h<=0) return {w,h};
-    const double scale=std::min({resolutions[resolution_].height/std::min(double(h),w*9./16),8192./w,8192./h});
+    const double viewHeight=aspect_==0 ? std::min(double(h),w*9./16) : h;
+    const double scale=std::min({resolutions[resolution_].height/viewHeight,8192./w,8192./h});
     return {std::max(1,int(std::lround(w*scale))),std::max(1,int(std::lround(h*scale)))};
 }
 void SdlDisplay::save() const {
@@ -115,7 +126,7 @@ void SdlDisplay::save() const {
     auto temporary=path_;temporary+=".tmp";std::ofstream output(temporary);
     output<<"[Display]\nmode="<<names[mode_]<<"\nresolution=";
     if(resolution_) output<<resolutions[resolution_].width<<'x'<<resolutions[resolution_].height;else output<<"auto";
-    output<<"\nfps_limit="<<frameLimit()<<"\nvsync="<<int(vsync_)<<"\nshow_fps="<<int(fps_)<<'\n';output.close();
+    output<<"\nfps_limit="<<frameLimit()<<"\nvsync="<<int(vsync_)<<"\nshow_fps="<<int(fps_)<<"\nmouse_lock="<<int(mouseLock_)<<"\naspect_mode="<<aspectNames[aspect_]<<'\n';output.close();
     if(output) std::filesystem::rename(temporary,path_,error);
 }
 
@@ -169,7 +180,14 @@ void SdlDisplay::append(std::vector<Draw>& draws) const {
     draws.push_back(Draw::label({233,548,270,24},"Show FPS",18,0xf5f6f9));
     draws.push_back(Draw::shape(Kind::Box,{555,544,66,30},fps_ ? 0x654515 : 0x100c05));
     draws.push_back(Draw::label({555,550,66,20},fps_ ? "On" : "Off",14,fps_ ? 0xffd992 : 0xbfc6d0,true));
-    draws.push_back(Draw::label({219,601,412,22},std::string("16:9  |  ")+settingsKeyLabel+" or Esc to close",14,0xbfc6d0));
+    const auto mouse=choiceBounds(mouseChoice),aspect=choiceBounds(aspectChoice);
+    draws.push_back(Draw::shape(Kind::Box,mouse,focus_==mouseChoice ? 0x523b1c : 0x2a1d0e));
+    draws.push_back(Draw::label({233,592,270,22},"Lock mouse to game",16,0xf5f6f9));
+    draws.push_back(Draw::label({555,592,66,22},mouseLock_ ? "On" : "Off",14,0xffd992,true));
+    draws.push_back(Draw::shape(Kind::Box,aspect,focus_==aspectChoice ? 0x523b1c : 0x2a1d0e));
+    draws.push_back(Draw::label({233,635,120,22},"Aspect mode",16,0xf5f6f9));
+    draws.push_back(Draw::label({355,635,265,22},aspects[aspect_],14,0xffd992,true));
+    draws.push_back(Draw::label({219,673,412,22},std::string(settingsKeyLabel)+" or Esc to close",14,0xbfc6d0));
 }
 
 

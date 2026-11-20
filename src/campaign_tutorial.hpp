@@ -6,6 +6,7 @@ namespace sw2 {
 // CampaignTutorial owns the 30 Hz simulation. Its coordinates use the original
 // 850-wide game rules even when the renderer exposes extra terrain on either side.
 class CampaignTutorial {
+    friend struct CampaignProbe;
 public:
     CampaignTutorial(const MenuAssets&,const std::filesystem::path&,Difficulty,int retries=0);
     CampaignTutorial(const MenuAssets&,const std::filesystem::path& assetsRoot,const CampaignProgress&);
@@ -16,6 +17,8 @@ public:
     void command(Point);
     void unitAbility(int slot=0);
     void selectArmy(bool center=false);
+    void minerOrder(bool);
+    void pcPressed(bool value) {pcPressed_=value;}
     std::vector<Draw> drawList() const;
     std::string takeVoice();
     struct SoundEvent {std::string name; Point position{}; bool spatial{true};};
@@ -45,8 +48,12 @@ public:
         int bombers{},bomberWaves{},nextBomberWave{},explosions{},boulderShots{},boulderHits{},enslavedGiants{};
         int enemyKnights{},selectedMilitary{};
         int knightHint{-1};
+        double furthestMilitary{};
+        int poisonHits{};
     };
     BattleStatus battleStatus() const;
+    struct UnitStatus {int symbol{};Point position;bool enemy{};double health{};int target{};std::string pose;int frame{},cloaked{};bool garrisoned{};};
+    std::vector<UnitStatus> unitStatus() const;
     bool showingResults() const;
     bool ended() const {return step_>=Step::Victory;}
     bool won() const {return step_==Step::Victory;}
@@ -99,6 +106,20 @@ private:
     std::vector<SoundEvent> sounds_;
     unsigned soundSequence_{};
     std::map<int,int> cursorFrames_;
+    struct Tooltip {int frame{},delay{};};
+    std::map<int,Tooltip> tooltips_;
+    int hoveredTooltip_{},tooltipHoverTicks_{},shownTooltip_{},tooltipRemaining_{};
+    struct CastlePart {int symbol{};Point origin{};Rect hit;};
+    std::vector<CastlePart> castleParts_;
+    std::map<int,std::vector<Rect>> castleMasks_;
+    bool castleHit(const CastlePart&,Point) const;
+    struct CastleLayer {int owner{},state{},depth{},base{},prefix{},period{},length{};Draw::Blend blend{};};
+    std::vector<CastleLayer> castleLayers_;
+    std::map<int,std::pair<int,int>> castleState_;
+    int pressedCastle_{};
+    bool pcPressed_{};
+    int poisonHits_{};
+    int selectedBuilding_{};
     struct CommandTarget {enum Kind {Move,Mine,Pray,Enemy}; Kind kind{Move}; int id{-1};};
     struct ClickMarker {Point position; int frame{1};};
     std::vector<ClickMarker> clickMarkers_;
@@ -225,6 +246,11 @@ private:
     void updateDefence();
     void advanceDefence();
     double frontLine() const;
+    double visionBoundary() const;
+    bool visible(const Unit&) const;
+    void drawTooltips(std::vector<Draw>&) const;
+    int tooltipAt() const;
+    void updateTooltip();
     void updateCastleArcher(bool enemy=false);
     void advanceArrow(Flight&);
     void drawCastleArcher(std::vector<std::pair<double,Draw>>&,bool enemy=false) const;

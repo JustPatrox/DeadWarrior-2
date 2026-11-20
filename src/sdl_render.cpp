@@ -10,10 +10,17 @@
 
 namespace sw2 {
 namespace {
-SDL_FRect rect(Rect r,const Viewport& v) {return {float(v.pixels.x+(r.x-Viewport::left)*v.scale),float(v.pixels.y+r.y*v.scale),float(r.w*v.scale),float(r.h*v.scale)};}
+SDL_FRect rect(Rect r,const Viewport& v) {return {float(v.pixels.x+(r.x-Viewport::left)*v.scaleX),float(v.pixels.y+r.y*v.scale),float(r.w*v.scaleX),float(r.h*v.scale)};}
 SDL_Color color(const Draw& d) {return {Uint8(d.color>>16),Uint8(d.color>>8),Uint8(d.color),Uint8(std::clamp(d.alpha,0.,1.)*255)};}
 }
-SdlRenderer::SdlRenderer(SDL_Window* window,const MenuAssets& art,const std::filesystem::path& root):art_(art),root_(root) {
+SdlRenderer::SdlRenderer(SDL_Window* window,const MenuAssets& art,const std::filesystem::path& root):art_(art),compositor_(art,[](const std::filesystem::path& path) {
+    auto loaded=SDL_LoadPNG(path.string().c_str());if(!loaded) throw std::runtime_error(SDL_GetError());
+    auto surface=SDL_ConvertSurface(loaded,SDL_PIXELFORMAT_RGBA32);SDL_DestroySurface(loaded);
+    if(!surface) throw std::runtime_error(SDL_GetError());
+    Raster r;r.width=surface->w;r.height=surface->h;r.rgba.resize(size_t(r.width)*r.height*4);
+    for(int y=0;y<r.height;++y) std::copy_n(static_cast<Uint8*>(surface->pixels)+y*surface->pitch,r.width*4,r.rgba.data()+size_t(y)*r.width*4);
+    SDL_DestroySurface(surface);return r;
+}),root_(root) {
     renderer_=SDL_CreateRenderer(window,nullptr);
     if(!renderer_) throw std::runtime_error(std::string("Renderer initialization failed: ")+SDL_GetError());
     SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
@@ -36,7 +43,21 @@ SdlRenderer::SdlRenderer(SDL_Window* window,const MenuAssets& art,const std::fil
     if(!font_) throw std::runtime_error(SDL_GetError());
     SDL_SetTextureScaleMode(font_,SDL_SCALEMODE_LINEAR);
 }
-SdlRenderer::~SdlRenderer() {for(auto& [_,cached]:images_) SDL_DestroyTexture(cached.image);SDL_DestroyTexture(font_);SDL_DestroyRenderer(renderer_);}
+SdlRenderer::~SdlRenderer() {for(auto& [_,cached]:images_) SDL_DestroyTexture(cached.image);SDL_DestroyTexture(compositeTexture_);SDL_DestroyTexture(font_);SDL_DestroyRenderer(renderer_);}
+SDL_Texture* SdlRenderer::composite(const Draw& d) {
+    const auto pixels=compositor_.image(d);
+    if(pixels!=compositePixels_) {
+        if(compositePixels_ && (pixels->width!=compositePixels_->width || pixels->height!=compositePixels_->height)) {SDL_DestroyTexture(compositeTexture_);compositeTexture_=nullptr;}
+        if(!compositeTexture_) {
+            compositeTexture_=SDL_CreateTexture(renderer_,SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,pixels->width,pixels->height);
+            if(!compositeTexture_) throw std::runtime_error(SDL_GetError());
+            SDL_SetTextureBlendMode(compositeTexture_,SDL_BLENDMODE_BLEND);SDL_SetTextureScaleMode(compositeTexture_,SDL_SCALEMODE_LINEAR);
+        }
+        if(!SDL_UpdateTexture(compositeTexture_,nullptr,pixels->rgba.data(),pixels->width*4)) throw std::runtime_error(SDL_GetError());
+        compositePixels_=pixels;
+    }
+    return compositeTexture_;
+}
 SDL_Texture* SdlRenderer::image(const std::filesystem::path& file,int tint) {
     const auto key=std::pair{file,tint};
     if(auto it=images_.find(key);it!=images_.end()) {it->second.serial=++serial_;return it->second.image;}
@@ -62,7 +83,8 @@ SDL_Texture* SdlRenderer::image(const std::filesystem::path& file,int tint) {
 }
 void SdlRenderer::text(const Draw& d,const Viewport& v) {
     const float scale=float(d.fontSize/48*v.scale);
-    auto width=[&](const std::string& s){float w=0;for(unsigned char c:s) if(c>=32&&c<127) w+=glyphs_[c-32][6]*scale;return w;};
+    const float scaleX=float(d.fontSize/48*v.scaleX);
+    auto width=[&](const std::string& s){float w=0;for(unsigned char c:s) if(c>=32&&c<127) w+=glyphs_[c-32][6]*scaleX;return w;};
     auto target=rect(d.target,v);
     std::vector<std::string> lines;std::istringstream words(d.text);std::string line,word;
     // Authored newlines are retained; long labels wrap within their layout box.
@@ -82,23 +104,24 @@ void SdlRenderer::text(const Draw& d,const Viewport& v) {
         for(unsigned char ch:row) {
             if(ch<32||ch>=127) continue;
             const auto& g=glyphs_[ch-32];SDL_FRect source{g[0],g[1],g[2]-g[0],g[3]-g[1]};
-            SDL_FRect dst{x+g[4]*scale,y+g[5]*scale,source.w*scale,source.h*scale};
-            SDL_RenderTexture(renderer_,font_,&source,&dst);x+=g[6]*scale;
+            SDL_FRect dst{x+g[4]*scaleX,y+g[5]*scale,source.w*scaleX,source.h*scale};
+            SDL_RenderTexture(renderer_,font_,&source,&dst);x+=g[6]*scaleX;
         }
         y+=float(d.fontSize*v.scale*1.2);
     }
 }
 void SdlRenderer::draw(const std::vector<Draw>& draws,int w,int h) {
     SDL_SetRenderDrawColor(renderer_,0,0,0,255);SDL_RenderClear(renderer_);
-    Viewport v(w,h);const auto view=rect({Viewport::left,0,Viewport::width,700},v);
+    Viewport v(w,h);const auto view=rect({Viewport::left,0,Viewport::width,Viewport::height},v);
     SDL_Rect clip{int(view.x),int(view.y),int(view.w),int(view.h)};SDL_SetRenderClipRect(renderer_,&clip);
     for(const auto& d:draws) {
         auto dst=rect(d.target,v);
         if(dst.w<=0||dst.h<=0||dst.x+dst.w<0||dst.x>w||dst.y+dst.h<0||dst.y>h) continue;
-        if(d.symbol) {
-            auto texture=image(art_.texture(d.symbol,d.frame).file,d.redOffset);
+        if(d.symbol || d.children) {
+            auto texture=d.children ? composite(d) : image(art_.texture(d.symbol,d.frame).file,d.redOffset);
             SDL_SetTextureAlphaMod(texture,Uint8(std::clamp(d.alpha,0.,1.)*255));
-            SDL_RenderTextureRotated(renderer_,texture,nullptr,&dst,d.rotation,nullptr,d.mirrored ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+            SDL_FRect source{};if(d.source) {float tw,th;SDL_GetTextureSize(texture,&tw,&th);const auto a=*d.source;source={float(a.x*tw),float(a.y*th),float(a.w*tw),float(a.h*th)};}
+            SDL_RenderTextureRotated(renderer_,texture,d.source ? &source : nullptr,&dst,d.rotation,nullptr,d.mirrored ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
         } else {
             const auto c=color(d);SDL_SetRenderDrawColor(renderer_,c.r,c.g,c.b,c.a);
             if(d.kind==Draw::Kind::Text) text(d,v);
@@ -109,13 +132,13 @@ void SdlRenderer::draw(const std::vector<Draw>& draws,int w,int h) {
                 if(d.kind==Draw::Kind::Ellipse) {
                     vertices.push_back({{dst.x+dst.w/2,dst.y+dst.h/2},shade,{0,0}});
                     for(int i=0;i<=40;++i) {const double a=i*2*std::numbers::pi/40;vertices.push_back({{dst.x+dst.w/2+dst.w/2*float(std::cos(a)),dst.y+dst.h/2+dst.h/2*float(std::sin(a))},shade,{0,0}});}
-                } else for(auto p:d.vertices) vertices.push_back({{dst.x+float(p.x*v.scale),dst.y+float(p.y*v.scale)},shade,{0,0}});
+                } else for(auto p:d.vertices) vertices.push_back({{dst.x+float(p.x*v.scaleX),dst.y+float(p.y*v.scale)},shade,{0,0}});
                 for(int i=1;i+1<int(vertices.size());++i) {indices.push_back(0);indices.push_back(i);indices.push_back(i+1);}
                 if(!indices.empty()) SDL_RenderGeometry(renderer_,nullptr,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()));
             } else if(d.kind==Draw::Kind::Line) {
                 for(size_t i=1;i<d.vertices.size();++i) {
                     const auto a=d.vertices[i-1],b=d.vertices[i];
-                    const float ax=dst.x+float(a.x*v.scale),ay=dst.y+float(a.y*v.scale),bx=dst.x+float(b.x*v.scale),by=dst.y+float(b.y*v.scale);
+                    const float ax=dst.x+float(a.x*v.scaleX),ay=dst.y+float(a.y*v.scale),bx=dst.x+float(b.x*v.scaleX),by=dst.y+float(b.y*v.scale);
                     const float dx=bx-ax,dy=by-ay,length=std::max(.001f,std::hypot(dx,dy));
                     const float nx=-dy/length*float(d.lineWidth*v.scale/2),ny=dx/length*float(d.lineWidth*v.scale/2);
                     SDL_FColor shade{c.r/255.f,c.g/255.f,c.b/255.f,c.a/255.f};

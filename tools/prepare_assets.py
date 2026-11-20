@@ -29,6 +29,10 @@ STEPS = (
     ("build_knight_assets.py",),
     ("build_archidon_map.py", "--level", "9"),
     ("build_interaction_assets.py",),
+    ("build_interface_assets.py",),
+    ("build_castle_assets.py",),
+    ("build_pc_button_assets.py",),
+    ("build_tooltip_assets.py",),
     ("build_wip_assets.py",),
     ("build_pause_assets.py",),
     ("refresh_actor_loadouts.py",),
@@ -71,6 +75,8 @@ def validate(args):
     for file in ("art/menu/left.png", "art/menu/right.png", "assets/branding/max-games.png"):
         if not (ROOT / file).is_file():
             raise ValueError("Missing repository resource: " + file)
+    if not (ROOT / "work/tools/flashplayer-sa.exe").is_file():
+        raise ValueError("Original castle artwork export requires the optional Adobe standalone reference player at work/tools/flashplayer-sa.exe.")
     if args.reuse_extraction:
         inventory = json.loads((ROOT / "evidence/inventory.json").read_text(encoding="utf-8"))
         if inventory["metadata"]["sha256"] != SOURCE_SHA256:

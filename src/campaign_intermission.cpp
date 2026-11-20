@@ -156,7 +156,9 @@ std::vector<Draw> CampaignIntermission::drawList() const {
     std::vector<Draw> out;
     const int over=target();
     auto emit=[&](Element e,int frame=1,double alpha=1.) {
-        out.push_back({e.id,frame,element(e.id,e.origin,e.scale,frame).bounds,alpha});
+        Draw d{e.id,frame,element(e.id,e.origin,e.scale,frame).bounds,alpha};
+        if(e.id==436 || e.id==507) coverBackdrop(out,std::move(d),{Viewport::left,0,Viewport::width,Viewport::height});
+        else out.push_back(std::move(d));
     };
     auto button=[&](Element e) {emit(e,e.id==over ? (pressed_==over ? 3 : 2) : 1);};
     auto backdrop=[&](Element panel) {

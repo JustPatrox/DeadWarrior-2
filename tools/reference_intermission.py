@@ -67,11 +67,11 @@ def diagnostic_copy(source=SOURCE):
     return b"CWS"+original[3:4]+struct.pack("<I",len(data)+8)+zlib.compress(data,5)
 
 
-def capture(width,height,fixture):
+def capture(width,height,fixture,level=1):
     pending=""
     received=threading.Event()
     payload=None
-    out=root/"evidence/adobe-intermission"
+    out=root/("evidence/adobe-map-repair" if level>1 else "evidence/adobe-intermission")
     out.mkdir(parents=True,exist_ok=True)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
@@ -115,7 +115,7 @@ def capture(width,height,fixture):
                     for code in (0x200,0x201,0x202): send(code,x,y); time.sleep(.1)
                 def request(label,screen="",points=0):
                     nonlocal pending
-                    received.clear(); pending=f"{label},{width},{height}"
+                    received.clear(); pending=f"{label},{width},{height},{level}"
                     if not received.wait(12): raise RuntimeError(f"Adobe timed out at {label}")
                     path,metadata,data=payload
                     if path=="/error": raise RuntimeError(data.decode())
@@ -126,6 +126,8 @@ def capture(width,height,fixture):
                     image.save(out/f"{width}x{height}-{label}.png")
                     print(label,metadata,flush=True)
                 request("prepare"); time.sleep(2)
+                if level>1:
+                    time.sleep(3);request("map-level-"+str(level),"campaignMap",0);return
                 upgrade="campaignUpgradeScreen"
                 send(0x200,425,493); time.sleep(.4); request("upgrades",upgrade,1)
                 click(750,664); time.sleep(.4); request("confirm-upgrades",upgrade,1)
@@ -139,5 +141,6 @@ def capture(width,height,fixture):
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("width",type=int); parser.add_argument("height",type=int)
+    parser.add_argument("--map-level",type=int,default=1,choices=range(1,14))
     args=parser.parse_args()
-    capture(args.width,args.height,diagnostic_copy())
+    capture(args.width,args.height,diagnostic_copy(),args.map_level)

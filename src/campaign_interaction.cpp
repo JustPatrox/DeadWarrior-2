@@ -2,8 +2,72 @@
 #include <algorithm>
 #include <cmath>
 #include <utility>
+#include <tuple>
 
 namespace sw2 {
+bool CampaignTutorial::castleHit(const CastlePart& part,Point p) const {
+    const auto mask=castleMasks_.find(part.symbol);
+    return mask==castleMasks_.end() ? part.hit.contains(p) : std::any_of(mask->second.begin(),mask->second.end(),[&](const Rect& row){return row.contains(p);});
+}
+double CampaignTutorial::visionBoundary() const {
+    return std::min(length_,std::max(legacyWidth,frontLine())+rules_.at("visionSize"));
+}
+bool CampaignTutorial::visible(const Unit& unit) const {
+    return !unit.enemy || cinematic_>=0 || ended() || step_==Step::Enemy || unit.position.x<=visionBoundary();
+}
+int CampaignTutorial::tooltipAt() const {
+    if(!cursor_ || ended() || cinematic_>=0) return 0;
+    struct Entry {int unit,icon;Point at;};
+    const Entry entries[]={{miner,10036,{4,589.35}},{sword,10039,{61.6,590}},
+        {spearton,10051,{32.85,643.35}},{archer,10042,{119.2,590}},{ninja,10054,{90.4,643.35}},
+        {wizard,10048,{234.4,589.35}},{healer,10045,{176.8,589.35}},{enslavedGiant,9852,{205.65,643.35}}};
+    for(const auto& entry:entries) {
+        if(!trainingAvailable_ || (entry.unit==spearton && !mission_) ||
+           (entry.unit==miner && step_<Step::Commands)) continue;
+        if((entry.unit==enslavedGiant && mission_<6) || (entry.unit==archer && mission_<2) ||
+           (entry.unit==ninja && mission_<3) || ((entry.unit==wizard || entry.unit==healer)&&mission_<4)) continue;
+        if(!art_.art.contains({entry.icon,1}) || !sprite(entry.icon,1,entry.at).target.contains(*cursor_)) continue;
+        return entry.unit;
+    }
+    if(rangeSelected_ && Rect{643,590,64,32}.contains(*cursor_)) return -1;
+    if(hitControl("garrisonButton",*cursor_)) return -10;
+    if(hitControl("defendButton",*cursor_)) return -11;
+    if(hitControl("attackButton",*cursor_)) return -12;
+    if(Rect{309,648,94,25}.contains(*cursor_)) return -13;
+    if(Rect{444,648,94,25}.contains(*cursor_)) return -14;
+    const auto selected=std::find_if(units_.begin(),units_.end(),[](const Unit& u){return u.selected && !u.enemy && u.hp>0;});
+    if(selected!=units_.end() && !rangeSelected_) {
+        for(auto [symbol,key,at]:{std::tuple{2311,-20,Point{813,642}},std::tuple{6458,-21,Point{744,679.5}},
+                                 std::tuple{6457,-22,Point{813,678}},std::tuple{8808,selected->garrisoned ? -24 : -23,Point{675,678}}})
+            if(sprite(symbol,1,at).target.contains(*cursor_)) return key;
+        if(Rect{647,582,56,48}.contains(*cursor_)) {
+            if(selected->symbol==sword && mission_ && upgrades_[2]) return 90001;
+            if(selected->symbol==ninja && mission_>=3) return 90002;
+            if(selected->symbol==wizard && mission_>=4) return 90003;
+            if(selected->symbol==healer && mission_>=4) return 90006;
+        }
+        if(Rect{716,582,56,48}.contains(*cursor_)) {
+            if(selected->symbol==wizard && mission_>=4 && upgrades_[17]) return 90004;
+            if(selected->symbol==healer && mission_>=4 && upgrades_[8]) return 90007;
+        }
+        if(Rect{785,582,56,48}.contains(*cursor_) && selected->symbol==wizard && mission_>=4 && upgrades_[13]) return 90005;
+    }
+    return 0;
+}
+void CampaignTutorial::updateTooltip() {
+    if(tooltipRemaining_>0) --tooltipRemaining_;
+    const int key=tooltipAt();
+    if(key!=hoveredTooltip_) {hoveredTooltip_=key;tooltipHoverTicks_=0;}
+    const auto tip=tooltips_.find(key);
+    if(tip!=tooltips_.end() && ++tooltipHoverTicks_>=tip->second.delay) {
+        shownTooltip_=key;tooltipRemaining_=2;
+    }
+}
+void CampaignTutorial::drawTooltips(std::vector<Draw>& out) const {
+    const auto tip=tooltips_.find(shownTooltip_);
+    if(tooltipRemaining_>0 && tip!=tooltips_.end() && !ended() && cinematic_<0)
+        out.push_back(sprite(1119,tip->second.frame,{0,Viewport::height-700}));
+}
 void CampaignTutorial::sound(std::string name,Point position,bool spatial) {
     sounds_.push_back({std::move(name),position,spatial});
 }
@@ -33,7 +97,7 @@ CampaignTutorial::CommandTarget CampaignTutorial::pointerTarget(Point point) con
     }
     for (int i=int(units_.size())-1;i>=0;--i) {
         const auto& u=units_[i];
-        if (!u.enemy || u.hp<=0 || u.cloakTicks) continue;
+        if (!u.enemy || u.hp<=0 || u.cloakTicks || !visible(u)) continue;
         const double size=scale(u);
         if (std::abs(plane.x-u.position.x)<u.width*size/2 && plane.y<=u.position.y+4 && plane.y>=u.position.y-u.height*size)
             return {CommandTarget::Enemy,i};

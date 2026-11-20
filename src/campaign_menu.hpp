@@ -6,6 +6,8 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <memory>
+#include <cstdint>
 
 namespace sw2 {
 struct Point { double x{}, y{}; };
@@ -17,9 +19,12 @@ struct Rect {
 };
 
 struct Viewport {
-    static constexpr double height = 700, width = height * 16 / 9;
-    static constexpr double left = (850 - width) / 2, right = left + width;
-    double scale;
+    enum class Aspect { Fixed,Stretched,Dynamic };
+    static inline double height=700,width=700.*16/9,left=(850-width)/2,right=left+width;
+    static inline Aspect aspect=Aspect::Fixed;
+    static void configure(Aspect,int clientWidth,int clientHeight);
+    static std::optional<Point> battlePoint(std::optional<Point>);
+    double scale,scaleX;
     Rect pixels;
     Viewport(int clientWidth, int clientHeight);
     std::optional<Point> toStage(Point physical) const;
@@ -64,11 +69,17 @@ struct Draw {
     bool centered{}, mirrored{};
     double rotation{};
     int redOffset{};
+    std::optional<Rect> source;
+    enum class Blend {Normal,Add,Overlay,Screen};
+    Blend blend{Blend::Normal};
+    std::shared_ptr<const std::vector<Draw>> children;
+    static Draw group(std::vector<Draw>,Point origin);
     std::vector<Point> vertices;
     double lineWidth{1};
     static Draw shape(Kind kind,Rect target,unsigned color,double opacity=1);
     static Draw label(Rect target,std::string text,double size,unsigned color,bool centered=false);
 };
+void coverBackdrop(std::vector<Draw>&,Draw,Rect);
 enum class Page { Opening, Main, NewOrContinue, Difficulty, Intro, CampaignMap };
 enum class Action { None, ClickSound, MusicToggle, Online, FirstGame, Stickpage, IntroLink, Map, LoadCampaign, Unavailable };
 enum class Difficulty { Normal, Hard, Insane };

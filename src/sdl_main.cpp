@@ -32,7 +32,7 @@ class Application {
     std::unique_ptr<WorkInProgress> wip_;
     SDL_Texture* buffer_{};
     int bufferWidth_{},bufferHeight_{},lastStep_{-1},lastLogTick_{};
-    bool running_{true},notice_{true},pauseButton_{},optionPending_{};
+    bool running_{true},notice_{true},pauseButton_{},pcButton_{},optionPending_{};
     Clock::time_point noticeEnd_{Clock::now()+std::chrono::seconds(3)},bannerEnd_{},lastArmySelect_{};
     std::string banner_;
     double fps_{};
@@ -136,6 +136,10 @@ public:
         if(wip_) {wip_->point(p);if(action==1) wip_->press();if(action==2) wipAction(wip_->release());return;}
         if(campaign_) {campaign_->point(p);if(action==1) campaign_->press();if(action==2) {campaign_->release();campaignEvents();}return;}
         if(battle_) {
+            p=Viewport::battlePoint(p);
+            const Rect pc{320,674,48,22};
+            if(action==1 && p && !battle_->ended() && pc.contains(*p)) {pcButton_=true;battle_->pcPressed(true);return;}
+            if(action==2 && pcButton_) {pcButton_=false;battle_->pcPressed(false);if(p&&pc.contains(*p)) toggleSettings();return;}
             const Rect button{482,674,50,22};
             if(action==1&&p&&!battle_->ended()&&button.contains(*p)) {pauseButton_=true;return;}
             if(action==2&&pauseButton_) {pauseButton_=false;if(p&&button.contains(*p)) paused(true);return;}
@@ -202,6 +206,7 @@ public:
         } else if(campaign_) {campaign_->tick();campaignEvents();}else {menu_.tick();menuActions();}
     }
     void draw(int width,int height,const fs::path& snapshot={}) {
+        display_.configureViewport(width,height);
         auto native=renderer_.native();const auto [w,h]=snapshot.empty() ? display_.renderSize(width,height) : std::pair{width,height};
         if(!buffer_||w!=bufferWidth_||h!=bufferHeight_) {
             if(buffer_) SDL_DestroyTexture(buffer_);buffer_=SDL_CreateTexture(native,SDL_PIXELFORMAT_RGBA8888,SDL_TEXTUREACCESS_TARGET,w,h);
@@ -238,15 +243,24 @@ public:
                 else if(event.type==SDL_EVENT_KEY_DOWN&&!event.key.repeat) key(event.key.key);
                 else if(event.type==SDL_EVENT_KEY_UP) keyRelease(event.key.key);
                 else if(event.type==SDL_EVENT_WINDOW_MOUSE_LEAVE) pointer(0,{});
-                else if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST) {optionPending_=false;if(battle_&&!battle_->ended()) paused(true);}
+                else if(event.type==SDL_EVENT_WINDOW_FOCUS_LOST) {optionPending_=false;pcButton_=false;if(battle_) battle_->pcPressed(false);if(battle_&&!battle_->ended()) paused(true);}
                 else if(event.type==SDL_EVENT_MOUSE_MOTION||event.type==SDL_EVENT_MOUSE_BUTTON_DOWN||event.type==SDL_EVENT_MOUSE_BUTTON_UP) {
                     const bool motion=event.type==SDL_EVENT_MOUSE_MOTION;
                     const Point mouse{motion ? double(event.motion.x) : double(event.button.x),motion ? double(event.motion.y) : double(event.button.y)};
                     int w,h,pw,ph;SDL_GetWindowSize(window_,&w,&h);SDL_GetRenderOutputSize(renderer_.native(),&pw,&ph);
+                    display_.configureViewport(pw,ph);
                     const auto stage=Viewport(pw,ph).toStage({mouse.x*pw/std::max(w,1),mouse.y*ph/std::max(h,1)});
                     pointer(motion ? 0 : event.type==SDL_EVENT_MOUSE_BUTTON_UP ? 2 : event.button.button==SDL_BUTTON_RIGHT ? 3 : 1,stage);
                 }
             }
+            int clientW,clientH;SDL_GetWindowSize(window_,&clientW,&clientH);display_.configureViewport(clientW,clientH);
+            const bool confine=display_.mouseLock() && battle_ && !battle_->ended() && !pause_.isOpen() &&
+                !display_.isOpen() && !notice_ && (SDL_GetWindowFlags(window_)&SDL_WINDOW_INPUT_FOCUS);
+            SDL_SetWindowMouseGrab(window_,confine);
+            if(confine) {
+                const Viewport view(clientW,clientH);SDL_Rect bounds{int(view.pixels.x),int(view.pixels.y),int(view.pixels.w),int(view.pixels.h)};
+                SDL_SetWindowMouseRect(window_,&bounds);
+            } else SDL_SetWindowMouseRect(window_,nullptr);
             const auto now=Clock::now();
             // Keep each 30 Hz step, including when a presentation frame is slow.
             if((battle_&&(pause_.isOpen()||display_.isOpen()))||notice_) {deadline=now+interval;if(notice_) tick();}
@@ -282,10 +296,31 @@ public:
             key(SDLK_RALT);keyRelease(SDLK_RALT);require(!display_.isOpen(),"Right Option did not close settings");
             key(settingsKeyCode);keyRelease(settingsKeyCode);require(display_.isOpen(),"Option did not reopen settings");
         }
-        key(SDLK_END);key(SDLK_RETURN);require(display_.showFps(),"FPS switch failed");key(SDLK_ESCAPE);key(SDLK_ESCAPE);
+        key(SDLK_END);key(SDLK_RETURN);require(display_.showFps(),"FPS switch failed");
+        key(SDLK_DOWN);key(SDLK_RETURN);require(display_.mouseLock(),"Mouse lock setting failed");
+        key(SDLK_DOWN);key(SDLK_RETURN);display_.configureViewport(1024,768);
+        require(Viewport::aspect==Viewport::Aspect::Stretched,"Stretched mode input failed");draw(1024,768,out/"aspect-stretched.png");
+        key(SDLK_RETURN);display_.configureViewport(2560,1080);
+        require(Viewport::aspect==Viewport::Aspect::Dynamic && std::abs(Viewport::width/Viewport::height-2560./1080)<.0001,"Dynamic aspect input failed");
+        draw(2560,1080,out/"aspect-ultrawide.png");draw(720,1280,out/"aspect-portrait.png");
+        {
+            SdlDisplay restored(window_,renderer_.native(),saveDir_/"options.ini");restored.configureViewport(1024,768);
+            require(restored.mouseLock() && Viewport::aspect==Viewport::Aspect::Dynamic,"Mouse/aspect settings did not restore");
+        }
+        key(SDLK_RETURN);key(SDLK_UP);key(SDLK_RETURN);require(!display_.mouseLock(),"Mouse lock did not disable");
+        click({425,300});SDL_SyncWindow(window_);
+        require(SDL_GetWindowFlags(window_)&SDL_WINDOW_FULLSCREEN,"Borderless mode did not cover the desktop");draw(1280,720,out/"borderless.png");
+        click({425,243});SDL_SyncWindow(window_);require(!(SDL_GetWindowFlags(window_)&SDL_WINDOW_FULLSCREEN),"Windowed mode did not restore");
+        key(SDLK_ESCAPE);key(SDLK_ESCAPE);
         require(!pause_.isOpen(),"Pause did not resume");for(int i=0;i<15;++i) tick();require(battle_->ticks()==before+15,"Resume changed simulation rate");
         for(int level=1;level<CampaignProgress::playableLevelCount;++level) {
             progress_={};progress_.level=level;progress_.points=level;startBattle();for(int i=0;i<60;++i) tick();
+            if(level==1) {
+                click({344,683});require(display_.isOpen(),"PC toolbar button did not open settings");key(SDLK_ESCAPE);
+                pointer(0,Point{30,610});for(int i=0;i<4;++i) tick();
+                const auto list=battle_->drawList();require(std::any_of(list.begin(),list.end(),[](const Draw& d){return d.symbol==1119;}),"Original tooltip did not appear");
+                draw(1280,720,out/"original-tooltip.png");
+            }
             if(level==7) {
                 key(SDLK_SPACE);keyRelease(SDLK_SPACE);
                 require(battle_->battleStatus().selectedMilitary==3,"SPACE did not select the three starting soldiers");
@@ -297,7 +332,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true}\n";
         log("SELF-TEST passed");
     }
 };
