@@ -52,6 +52,7 @@ def run():
                     raise AssertionError((row(),settings()))
                 def point(x,y,battle=False):
                     w,h=size();lw,lh=query(23)/100,query(24)/100
+                    if query(21)&2:y+=lh/2-409
                     if settings()['aspect_mode']=='16:9':
                         s=min(w/lw,h/lh);px=w/2+(x-425)*s;py=(h-lh*s)/2+y*s
                     else:

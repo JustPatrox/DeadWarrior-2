@@ -33,6 +33,7 @@ def run(width,height):
                 user.SetWindowLongW(hwnd,-16,(style&~0x00cf0000)|0x80000000)
                 user.SetWindowPos(hwnd,0,0,0,width,height,0x34)
                 def click(x,y):
+                    if user.SendMessageW(hwnd,0x8000+21,0,0)&2:y-=59
                     r=wt.RECT(); user.GetClientRect(hwnd,ct.byref(r))
                     scale=min(r.right/(700*16/9),r.bottom/700)
                     px=round(r.right/2+(x-425)*scale); py=round((r.bottom-700*scale)/2+y*scale)

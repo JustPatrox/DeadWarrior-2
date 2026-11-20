@@ -40,6 +40,7 @@ def run():
                     def size():
                         r=wt.RECT();user.GetClientRect(hwnd,ct.byref(r));return r.right,r.bottom
                     def click(x,y):
+                        if query(21)&2:y-=59
                         w,h=size();s=min(w/(700*16/9),h/700)
                         px=round(w/2+(x-425)*s);py=round((h-700*s)/2+y*s)
                         for msg,b in ((0x200,0),(0x201,1),(0x202,0)):user.SendMessageW(hwnd,msg,b,(py<<16)|(px&65535))

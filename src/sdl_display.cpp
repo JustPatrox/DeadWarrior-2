@@ -1,4 +1,5 @@
 #include "sdl_platform.hpp"
+#include "pc_settings_layout.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cmath>
@@ -6,7 +7,7 @@
 
 namespace sw2 {
 namespace {
-constexpr Rect panel{193,120,464,578};
+using pcSettings::panel;
 constexpr auto aspects=std::array{"16:9","Stretched","Dynamic [Experimental]"};
 constexpr auto aspectNames=std::array{"16:9","stretched","dynamic"};
 constexpr auto modes=std::array{"Windowed","Borderless Window","Fullscreen"};
@@ -104,6 +105,7 @@ void SdlDisplay::key(SDL_Keycode key) {
     else if(key==SDLK_RETURN||key==SDLK_SPACE) apply(focus_);
 }
 void SdlDisplay::pointer(int action,std::optional<Point> point) {
+    point=pcSettings::local(point);
     int hit=-1;if(point) for(int i=0;i<choiceCount;++i) if(choiceBounds(i).contains(*point)) hit=i;
     if(action==1) {pressed_=hit;if(hit>=0) focus_=hit;}
     else if(action==2) {
@@ -134,6 +136,7 @@ void SdlDisplay::append(std::vector<Draw>& draws) const {
     if (!open_) return;
     using Kind=Draw::Kind;
     draws.push_back(Draw::shape(Kind::Box,{Viewport::left,0,Viewport::width,Viewport::height},0,0.72));
+    const auto first=draws.size();
     auto bevel=[&](Rect bounds,double corner,unsigned color) {
         auto frame=Draw::shape(Kind::Polygon,bounds,color);
         frame.vertices={{corner,0},{bounds.w-corner,0},{bounds.w,corner},
@@ -188,6 +191,7 @@ void SdlDisplay::append(std::vector<Draw>& draws) const {
     draws.push_back(Draw::label({233,635,120,22},"Aspect mode",16,0xf5f6f9));
     draws.push_back(Draw::label({355,635,265,22},aspects[aspect_],14,0xffd992,true));
     draws.push_back(Draw::label({219,673,412,22},std::string(settingsKeyLabel)+" or Esc to close",14,0xbfc6d0));
+    pcSettings::center(draws,first);
 }
 
 

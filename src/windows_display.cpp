@@ -1,4 +1,5 @@
 #include "windows_display.hpp"
+#include "pc_settings_layout.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -12,7 +13,7 @@ using sw2::Rect;
 using sw2::Viewport;
 
 namespace {
-constexpr Rect panel{193,120,464,578};
+using sw2::pcSettings::panel;
 constexpr auto aspects=std::array{"16:9","Stretched","Dynamic [Experimental]"};
 constexpr auto aspectNames=std::array{"16:9","stretched","dynamic"};
 constexpr auto modes=std::array{"Windowed","Borderless Window","Fullscreen"};
@@ -231,6 +232,7 @@ void DisplaySettings::key(HWND hwnd,WPARAM key) {
 
 void DisplaySettings::pointer(HWND hwnd,UINT message,std::optional<sw2::Point> point) {
     if (message!=WM_LBUTTONDOWN && message!=WM_LBUTTONUP && message!=WM_CAPTURECHANGED) return;
+    point=sw2::pcSettings::local(point);
     int hit=-1;
     if (point) for (int i=0;i<choiceCount;++i)
         if (choiceBounds(i).contains(*point)) hit=i;
@@ -257,6 +259,7 @@ void DisplaySettings::append(std::vector<Draw>& draws) const {
     if (!open_) return;
     using Kind=Draw::Kind;
     draws.push_back(Draw::shape(Kind::Box,{Viewport::left,0,Viewport::width,Viewport::height},0,0.72));
+    const auto first=draws.size();
     auto bevel=[&](Rect bounds,double corner,unsigned color) {
         auto frame=Draw::shape(Kind::Polygon,bounds,color);
         frame.vertices={{corner,0},{bounds.w-corner,0},{bounds.w,corner},
@@ -311,6 +314,7 @@ void DisplaySettings::append(std::vector<Draw>& draws) const {
     draws.push_back(Draw::label({233,635,120,22},"Aspect mode",16,0xf5f6f9));
     draws.push_back(Draw::label({355,635,265,22},aspects[aspectChoice_],14,0xffd992,true));
     draws.push_back(Draw::label({219,673,412,22},"Insert or Esc to close",14,0xbfc6d0));
+    sw2::pcSettings::center(draws,first);
 }
 
 void DisplaySettings::resize(HWND hwnd,WPARAM edge,RECT& outer) const {

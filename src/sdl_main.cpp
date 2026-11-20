@@ -1,3 +1,4 @@
+#include "pc_settings_layout.hpp"
 #include "sdl_platform.hpp"
 #include "campaign_tutorial.hpp"
 #include "campaign_intermission.hpp"
@@ -280,7 +281,7 @@ public:
         require(audio_.testMix(),"Audio decode/playback failed");
         draw(1280,720,out/"notice.png");notice_=false;
         for(int i=0;i<200;++i) tick();require(menu_.page()==Page::Main,"Menu did not finish opening");draw(1280,720,out/"main.png");
-        auto click=[&](Point p){pointer(0,p);pointer(1,p);pointer(2,p);};
+        auto click=[&](Point p){if(display_.isOpen()) {const auto shift=pcSettings::offset();p.x+=shift.x;p.y+=shift.y;}pointer(0,p);pointer(1,p);pointer(2,p);};
         click({161,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::NewOrContinue,"Native menu input failed");
         click({437,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::Difficulty,"New campaign input failed");
         click({154,668});for(int i=0;i<100;++i) tick();require(menu_.page()==Page::Intro,"Difficulty input failed");
@@ -293,6 +294,13 @@ public:
             require(!display_.isOpen(),"Option combination opened PC settings");
         }
         key(settingsKeyCode);keyRelease(settingsKeyCode);require(display_.isOpen(),"Platform settings shortcut failed");draw(1280,720,out/"settings.png");
+        auto settingsCentered=[&]{
+            std::vector<Draw> panel;display_.append(panel);
+            const auto border=std::find_if(panel.begin(),panel.end(),[](const Draw& d){return d.kind==Draw::Kind::Polygon;});
+            require(border!=panel.end() && std::abs(border->target.x+border->target.w/2-425)<.001 &&
+                    std::abs(border->target.y+border->target.h/2-Viewport::height/2)<.001,"PC settings panel is not centered");
+        };
+        settingsCentered();
         if constexpr(optionSettingsKey) {
             key(SDLK_RALT);keyRelease(SDLK_RALT);require(!display_.isOpen(),"Right Option did not close settings");
             key(settingsKeyCode);keyRelease(settingsKeyCode);require(display_.isOpen(),"Option did not reopen settings");
@@ -303,7 +311,7 @@ public:
         require(Viewport::aspect==Viewport::Aspect::Stretched,"Stretched mode input failed");draw(1024,768,out/"aspect-stretched.png");
         key(SDLK_RETURN);display_.configureViewport(2560,1080);
         require(Viewport::aspect==Viewport::Aspect::Dynamic && std::abs(Viewport::width/Viewport::height-2560./1080)<.0001,"Dynamic aspect input failed");
-        draw(2560,1080,out/"aspect-ultrawide.png");draw(720,1280,out/"aspect-portrait.png");
+        draw(2560,1080,out/"aspect-ultrawide.png");draw(720,1280,out/"aspect-portrait.png");settingsCentered();
         {
             SdlDisplay restored(window_,renderer_.native(),saveDir_/"options.ini");restored.configureViewport(1024,768);
             require(restored.mouseLock() && Viewport::aspect==Viewport::Aspect::Dynamic,"Mouse/aspect settings did not restore");
@@ -338,7 +346,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true}\n";
         log("SELF-TEST passed");
     }
 };
