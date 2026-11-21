@@ -26,6 +26,23 @@ def main():
             else:
                 raise RuntimeError('Test window manager did not become ready: ' + diagnostic)
             print('SMOKE X11 window manager ready', flush=True)
+            # The EWMH property is published during startup. Also require a
+            # real managed client to become viewable before launching SDL.
+            probe = subprocess.Popen(['xmessage', '-name', 'DW2DesktopProbe', '-timeout', '10', 'Desktop readiness'],
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            try:
+                for _ in range(30):
+                    state = subprocess.run(['xwininfo', '-name', 'DW2DesktopProbe'], capture_output=True, text=True, timeout=1)
+                    if state.returncode == 0 and 'Map State: IsViewable' in state.stdout:
+                        break
+                    time.sleep(.1)
+                else:
+                    raise RuntimeError('Test desktop could not map its readiness client: ' + state.stdout + state.stderr)
+            finally:
+                if probe.poll() is None:
+                    probe.kill()
+                probe.wait(timeout=5)
+            print('SMOKE X11 managed client verified', flush=True)
             with (out / 'smoke-output.log').open('w') as output:
                 game = subprocess.Popen([sys.argv[1], '--smoke-test', 'out/checks', '--save-dir', 'out/test-save'],
                                         stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT)
@@ -35,8 +52,12 @@ def main():
                     print('SMOKE timed out; collecting native thread stacks', flush=True)
                     with (out / 'smoke-stacks.log').open('w') as stacks:
                         for command in (["xwininfo", "-root", "-tree"],
+                                        ['ps', '-o', 'pid,ppid,stat,wchan:30,args', '-p', f'{manager.pid},{game.pid}'],
+                                        ['xprop', '-name', 'DeadWarrior 2'],
                                         ['sudo', '-n', 'gdb', '--batch', '-ex', 'set pagination off',
-                                         '-ex', 'thread apply all bt', '-p', str(game.pid)]):
+                                         '-ex', 'thread apply all bt', '-p', str(game.pid)],
+                                        ['sudo', '-n', 'gdb', '--batch', '-ex', 'set pagination off',
+                                         '-ex', 'thread apply all bt', '-p', str(manager.pid)]):
                             try:
                                 subprocess.run(command, stdin=subprocess.DEVNULL, stdout=stacks,
                                                stderr=subprocess.STDOUT, timeout=25)
