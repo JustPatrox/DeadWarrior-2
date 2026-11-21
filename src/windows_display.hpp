@@ -34,7 +34,7 @@ private:
     Mode startupMode_{Mode::Windowed};
     std::string savedOptions_;
     bool open_{},vsync_{},showFps_{},mouseLock_{};
-    int aspectChoice_{};
+    int aspectChoice_{2};
     int rateChoice_{1};
     int resolutionChoice_{}, resolutionFocus_{};
     int focused_{}, pressed_{-1};

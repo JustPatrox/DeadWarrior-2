@@ -1,0 +1,11 @@
+# Dynamic menu and unit separation
+
+Fresh Windows, Linux and macOS preferences now select **Dynamic**. Explicit saved `16:9`, `stretched` and `dynamic` choices still restore normally. This changes presentation only; simulation remains at 30 Hz.
+
+The original menu hides inactive pages below its 700-unit stage. A taller Dynamic viewport exposed those pages simultaneously. All four original panel timelines now draw relative to the current bottom edge, together with their hit regions. The version label follows the same bottom anchor; music, credits and Back stay at the top. Artwork and the original 0.2 slide easing are unchanged.
+
+The native unit update previously omitted the original `Unit.updateMotion` / `checkCollision` repulsion. The translation now applies it before drag and velocity limits: the original random gate, scaled hit widths, mass and Stand/Hold rules, fractional velocity-to-int conversion, opposite movement checks, and 0.51 axis nudges. Airborne, garrisoned, stunned and walk-through neighbors are excluded as in the source. Cloaked Ninjas are not targetable neighbors. This disperses overlapping idle troops without changing formation targets, attack range or damage.
+
+`tools/reference/CollisionObserver.as` measures prepared pairs directly in Adobe's original runtime. It resets pooled state and the original PRNG for each case, and never writes to the source SWF. Thirteen cases produced identical results at 1280×720 and 1920×1080. The portable `separation_probe` matches all resulting positions, velocities and next random values in `tools/fixtures/original-collisions.tsv`. This is component evidence; it does not claim identical large-battle spatial-hash iteration order or completion of the remaining campaign.
+
+The crowd regression starts 24 enemy Speartons at one point. After 600 original-rate updates they spread across roughly 157×152 world units, with no pair closer than five units. `menu_layout_probe` covers 30 mode/size/save combinations, including immediate tall resizes, visible controls and inverse input. `tools/check_dynamic_menu.py` exercises actual Windows menu input, portrait captures and preservation of a saved Fixed choice. The existing campaign, toolbar, economy and rendering checks remain required.

@@ -281,6 +281,14 @@ public:
         require(audio_.testMix(),"Audio decode/playback failed");
         draw(1280,720,out/"notice.png");notice_=false;
         for(int i=0;i<200;++i) tick();require(menu_.page()==Page::Main,"Menu did not finish opening");draw(1280,720,out/"main.png");
+        require(Viewport::aspect==Viewport::Aspect::Dynamic,"Fresh options did not default to Dynamic");
+        draw(686,720,out/"menu-portrait.png");
+        int menuButtons=0;
+        for(const auto& h:menu_.hits())if(h.bounds.y<Viewport::height&&h.bounds.y+h.bounds.h>0) {
+            require(h.symbol!=1009&&h.symbol!=1010&&h.symbol!=1015&&h.symbol!=1021&&h.symbol!=1018&&h.symbol!=1027,"Inactive menu panel visible in portrait window");
+            if(h.symbol==1002||h.symbol==708||h.symbol==1005)++menuButtons;
+        }
+        require(menuButtons==3,"Portrait menu lost its main controls");draw(1280,720);
         auto click=[&](Point p){if(display_.isOpen()) {const auto shift=pcSettings::offset();p.x+=shift.x;p.y+=shift.y;}pointer(0,p);pointer(1,p);pointer(2,p);};
         click({161,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::NewOrContinue,"Native menu input failed");
         click({437,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::Difficulty,"New campaign input failed");
@@ -307,7 +315,9 @@ public:
         }
         key(SDLK_END);key(SDLK_RETURN);require(display_.showFps(),"FPS switch failed");
         key(SDLK_DOWN);key(SDLK_RETURN);require(display_.mouseLock(),"Mouse lock setting failed");
-        key(SDLK_DOWN);key(SDLK_RETURN);display_.configureViewport(1024,768);
+        key(SDLK_DOWN);key(SDLK_RETURN);display_.configureViewport(1280,720);
+        require(Viewport::aspect==Viewport::Aspect::Fixed,"Saved 16:9 option is unavailable after Dynamic default");
+        key(SDLK_RETURN);display_.configureViewport(1024,768);
         require(Viewport::aspect==Viewport::Aspect::Stretched,"Stretched mode input failed");draw(1024,768,out/"aspect-stretched.png");
         key(SDLK_RETURN);display_.configureViewport(2560,1080);
         require(Viewport::aspect==Viewport::Aspect::Dynamic && std::abs(Viewport::width/Viewport::height-2560./1080)<.0001,"Dynamic aspect input failed");
@@ -361,7 +371,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true}\n";
         log("SELF-TEST passed");
     }
 };
@@ -389,7 +399,7 @@ int main(int argc,char** argv) {
         if(!window) throw std::runtime_error(SDL_GetError());
         if(test) SDL_Log("SMOKE native window created");
         const auto windowGuard=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(window,SDL_DestroyWindow);
-        SDL_SetWindowMinimumSize(window,640,360);SDL_SetWindowAspectRatio(window,16.f/9,16.f/9);
+        SDL_SetWindowMinimumSize(window,640,360);
         if(test) SDL_Log("SMOKE constructing application");
         Application app(window,root,saveDir);
         if(test) SDL_Log("SMOKE application ready");

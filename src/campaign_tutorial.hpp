@@ -89,6 +89,9 @@ private:
         int stunned{},targetsHit{},tint{-1};
         int idleFacing{};
         double altitude{};
+        double perspectiveScale{1};
+        int hitBoxWidth{50}; // Unit.initBase; independent of artwork/projectile bounds.
+        bool mayWalkThrough{};
         Order order{Order::Stand};
         int target{-1};
         int resource{-2},miningSlot{-1},bag{};
@@ -240,12 +243,14 @@ private:
     std::vector<BoulderFlight> boulders_;
     static constexpr Rect minimap{305.2,578.05,231,44};
     int random();
+    void seedRandom(int seed);
     int spawn(int symbol,Point p,bool enemy=false);
     double scale(const Unit&) const;
     double stat(const Unit&,const char*) const;
     double stat(int symbol,const char*) const;
     void animate(Unit&,const std::string&);
     void updateUnit(Unit&);
+    void separateUnits(Unit&);
     CommandTarget pointerTarget(Point) const;
     void drawPointer(std::vector<Draw>&) const;
     void sound(std::string name,Point position={},bool spatial=true);

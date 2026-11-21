@@ -698,6 +698,7 @@ class Window {
         case WM_APP+23: return capturePath_.empty() ? 0 : LRESULT(std::lround(Viewport::width*100));
         case WM_APP+24: return capturePath_.empty() ? 0 : LRESULT(std::lround(Viewport::height*100));
         case WM_APP+25: return capturePath_.empty() ? 0 : int(cursorConfined_);
+        case WM_APP+28: return capturePath_.empty() ? -1 : int(menu_.page());
         case WM_APP+26: {
             // Explicit diagnostic capture only; normal play still writes lastest.log.
             if(capturePath_.empty() || !tutorial_) return 0;

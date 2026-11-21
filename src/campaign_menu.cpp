@@ -200,14 +200,14 @@ void CampaignMenu::compose(std::vector<Draw>& draws,std::vector<Hit>& hits) cons
                             assets_.art.contains({p.symbol,4}) ? 4 : 0});
         }
     };
-    auto root = [&](int id,double dx,bool interactive) {
+    auto root = [&](int id,double dx,bool interactive,double dy=0.) {
         const auto& p=assets_.placement(1045,id);
-        placed(p,p.x+dx,p.y,interactive);
+        placed(p,p.x+dx,p.y+dy,interactive);
     };
     const bool opening=page_==Page::Opening;
     if (opening) {
         draws.push_back({0,1,stage,1}); // shape 720
-        if (frame_<=97) sprite(979,frame_,425,350,1,1);
+        if (frame_<=97) sprite(979,frame_,425,Viewport::height/2,1,1);
     }
     if (!opening || frame_>=124)
         sprite(976,1,0,0,1,1,opening ? assets_.alpha(979,frame_) : 1);
@@ -232,11 +232,14 @@ void CampaignMenu::compose(std::vector<Draw>& draws,std::vector<Hit>& hits) cons
         for (const auto& p:assets_.placements.at(panels[i])) {
             if (p.symbol==1010 && !hasSave_) continue;
             const double x=p.symbol==1009 && !hasSave_ ? 245 : p.x;
-            placed(p,panelPlacement.x+x,panelY_[i]+p.y,p.name!="-");
+            // The original panels animate relative to the 700-high stage.
+            // Keep that authored motion below the current viewport's bottom,
+            // so inactive pages cannot leak into a taller Dynamic window.
+            placed(p,panelPlacement.x+x,panelY_[i]+Viewport::height-700+p.y,p.name!="-");
         }
     }
     root(1032,Viewport::left,true);
-    root(1033,Viewport::left,false);
+    root(1033,Viewport::left,false,Viewport::height-700);
     if (page_==Page::Main && !credits_) root(1036,-Viewport::left,true);
     if (credits_) {
         hits.clear();

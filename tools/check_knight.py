@@ -16,7 +16,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 def run(width,height):
-    out=ROOT/'evidence/windows-knight';out.mkdir(exist_ok=True,parents=True)
+    out=Path(os.environ.get('DW2_TEST_OUT',ROOT/'evidence/windows-knight'));out.mkdir(exist_ok=True,parents=True)
     prefix=f'{width}x{height}';trace=out/f'{prefix}-steps.tsv';capture=out/f'{prefix}-capture.png'
     trace.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory() as temporary:

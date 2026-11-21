@@ -58,10 +58,10 @@ def run():
                     if process.poll() is None:process.terminate()
         def configure(hwnd,key,click,query,wait,size,capture):
             time.sleep(11)
-            assert settings()==dict(mode='windowed',resolution='auto',fps_limit='60',vsync='0',show_fps='0',mouse_lock='0',aspect_mode='16:9')
+            assert settings()==dict(mode='windowed',resolution='auto',fps_limit='60',vsync='0',show_fps='0',mouse_lock='0',aspect_mode='dynamic')
             key(0x2d);click(615,200);click(615,200)
             click(257,448);click(588,507);click(588,559);click(425,300);key(0x1b)
-            assert settings()==dict(mode='borderless',resolution='1600x900',fps_limit='30',vsync='1',show_fps='1',mouse_lock='0',aspect_mode='16:9')
+            assert settings()==dict(mode='borderless',resolution='1600x900',fps_limit='30',vsync='1',show_fps='1',mouse_lock='0',aspect_mode='dynamic')
             assert not (folder/'options.ini.tmp').exists()
         launch(configure)
         expected=options.read_bytes()
@@ -84,7 +84,7 @@ def run():
         launch(fullscreen)
         options.write_text('[Display]\nmode=invalid\nresolution=giant\nfps_limit=999999999999999999999\nvsync=wrong\nshow_fps=-5\n')
         def invalid(hwnd,key,click,query,wait,size,capture):
-            wait(lambda:settings()==dict(mode='windowed',resolution='auto',fps_limit='60',vsync='0',show_fps='0',mouse_lock='0',aspect_mode='16:9'))
+            wait(lambda:settings()==dict(mode='windowed',resolution='auto',fps_limit='60',vsync='0',show_fps='0',mouse_lock='0',aspect_mode='dynamic'))
             assert user.IsWindowVisible(hwnd)
         launch(invalid)
         report=dict(allInsertOptionsPersisted=True,relaunch=True,optionsSurviveDeleteSave=True,

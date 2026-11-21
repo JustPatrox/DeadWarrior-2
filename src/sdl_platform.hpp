@@ -76,7 +76,7 @@ class SdlDisplay {
     SDL_Window* window_{};
     SDL_Renderer* renderer_{};
     std::filesystem::path path_;
-    int mode_{},rate_{1},resolution_{},focus_{},pressed_{-1},aspect_{};
+    int mode_{},rate_{1},resolution_{},focus_{},pressed_{-1},aspect_{2};
     bool open_{},vsync_{},fps_{},mouseLock_{};
     std::array<int,4> windowed_{100,100,1280,720};
     void apply(int choice);

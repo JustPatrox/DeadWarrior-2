@@ -79,7 +79,15 @@ CampaignTutorial::CampaignTutorial(const MenuAssets& art,const std::filesystem::
         median_[i]=i ? length_-legacyWidth : legacyWidth;
     }
     // com.brockw.random.Random, campaign Main.seed = 0.
-    int previous=161803398, next=1;
+    seedRandom(0);
+    spawn(sword,{legacyWidth+2000,depth_/3});
+    spawn(sword,{legacyWidth+2000,2*depth_/3});
+    spawn(miner,{legacyWidth+400,depth_/2});
+    createMiningBlocks();
+}
+void CampaignTutorial::seedRandom(int seed) {
+    randomA_=0;randomB_=21;
+    int previous=161803398-std::abs(seed), next=1;
     seed_[55]=previous;
     for (int i=1;i<55;++i) {
         const int index=21*i%55;
@@ -92,10 +100,6 @@ CampaignTutorial::CampaignTutorial(const MenuAssets& art,const std::filesystem::
         seed_[k]-=seed_[1+(k+30)%55];
         if (seed_[k]<0) seed_[k]+=2147483647;
     }
-    spawn(sword,{legacyWidth+2000,depth_/3});
-    spawn(sword,{legacyWidth+2000,2*depth_/3});
-    spawn(miner,{legacyWidth+400,depth_/2});
-    createMiningBlocks();
 }
 void CampaignTutorial::createMiningBlocks() {
     gold_.clear();
@@ -346,8 +350,10 @@ void CampaignTutorial::updateUnit(Unit& u) {
     double limit=mission_ && u.symbol==sword && u.rageCounter<rules_.at("rage.effect") ?
         rules_.at("rage.rageMaxVelocity") : stat(u,u.cloakTicks ? "stealth.maxVelocity" : "maxVelocity");
     if (u.stunned) limit*=8;
-    u.velocity.x=std::clamp((u.velocity.x+force.x)*drag,-limit,limit);
-    u.velocity.y=std::clamp((u.velocity.y+force.y)*drag,-limit*.5,limit*.5);
+    u.velocity.x+=force.x;u.velocity.y+=force.y;
+    separateUnits(u); // Original updateMotion nudges before drag and velocity caps.
+    u.velocity.x=std::clamp(u.velocity.x*drag,-limit,limit);
+    u.velocity.y=std::clamp(u.velocity.y*drag,-limit*.5,limit*.5);
     const double nextX=u.position.x+u.velocity.x,nextY=u.position.y+u.velocity.y;
     const double boundary=u.garrisoned ? 0 : legacyWidth+200;
     if ((nextX<=boundary && u.velocity.x<0) || (nextX>=length_-boundary && u.velocity.x>0))
@@ -364,6 +370,47 @@ void CampaignTutorial::updateUnit(Unit& u) {
     u.frame=u.frame>=end ? 2 : u.frame+1;
     if (mission_ && u.symbol==sword && attacking && u.rageCounter<rules_.at("rage.effect"))
         u.frame=std::min(end,u.frame+1);
+}
+void CampaignTutorial::separateUnits(Unit& u) {
+    // Unit.updateMotion / checkCollision. Util.sgn(0) is +1 in the source.
+    const auto sign=[](double x){return x<0 ? -1 : 1;};
+    constexpr double randomScale=4.656612875245797e-10;
+    const double a=u.perspectiveScale=scale(u);
+    if(random()*randomScale<=.4 || u.mayWalkThrough || u.stunned || u.garrisoned)return;
+    const double mine=stat(u,"mass");
+    for(auto& other:units_) {
+        if(&other==&u || other.hp<=0 || other.cloakTicks || other.altitude!=0 || other.garrisoned || other.mayWalkThrough || other.stunned)continue;
+        const double b=other.perspectiveScale;
+        // isCollision's dx/dy parameters are AS3 int, not Number.
+        const double x=u.position.x+u.velocity.x-int(u.velocity.x)-other.position.x;
+        const double y=u.position.y+u.velocity.y-int(u.velocity.y)-other.position.y;
+        const double radius=u.hitBoxWidth*(a+b)/2;
+        if(std::abs(x)>=radius || std::abs(y)>=radius || x*x+y*y>=radius*radius)continue;
+        const double width=(u.hitBoxWidth*a+other.hitBoxWidth*b)/2;
+        if(width<=0)continue;
+        const bool meStanding=u.order==Order::Stand && !u.hold;
+        const bool himStanding=other.order==Order::Stand && !other.hold;
+        const bool miners=isWorker(u.symbol)&&isWorker(other.symbol);
+        const double theirs=stat(other,"mass");
+        double amount=std::abs(u.position.x-other.position.x)/width;
+        if(amount<=1) {
+            if(u.position.x==other.position.x)u.position.x=other.position.x+random()*randomScale-.5;
+            if(u.position.x!=other.position.x && (sign(u.velocity.x)!=-sign(other.velocity.x) || u.enemy!=other.enemy) &&
+               ((std::abs(u.velocity.x)<1 && std::abs(other.velocity.x)<1) || miners)) {
+                if(mine<theirs || meStanding)u.velocity.x+=(1-amount)*sign(u.position.x-other.position.x)*.51;
+                if(mine>=theirs || himStanding)other.velocity.x+=(1-amount)*sign(other.position.x-u.position.x)*.51;
+            }
+        }
+        amount=std::abs(u.position.y-other.position.y)/width;
+        if(amount<=1) {
+            if(u.position.y==other.position.y)u.position.y=other.position.y+random()*randomScale-.5;
+            if(u.position.y!=other.position.y && sign(u.velocity.y)!=-sign(other.velocity.y) && u.enemy==other.enemy &&
+               ((std::abs(u.velocity.y)<1 && std::abs(other.velocity.y)<1) || miners)) {
+                if(mine<theirs || meStanding)u.velocity.y+=(1-amount)*sign(u.position.y-other.position.y)*.51;
+                if(mine>=theirs || himStanding)other.velocity.y+=(1-amount)*sign(other.position.y-u.position.y)*.51;
+            }
+        }
+    }
 }
 void CampaignTutorial::setFormation(Point p) {
     std::vector<Unit*> selected;
