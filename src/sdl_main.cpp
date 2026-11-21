@@ -122,7 +122,7 @@ public:
         :window_(window),root_(std::move(root)),assetsDir_(root_/"assets"),saveDir_(std::move(saves)),
          log_(saveDir_/"lastest.log",std::ios::trunc),art_(assetsDir_/"menu"),menu_(art_),renderer_(window,art_,root_),
          audio_(assetsDir_/"audio",[this](std::string text){log(text);}),display_(window,renderer_.native(),saveDir_/"options.ini"),pause_(art_) {
-        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","knight","deads","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
+        for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","knight","deads","crawlers","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
         loadSave();menu_.restart(saved_.has_value());
         if(auto icon=SDL_LoadPNG((root_/"icon.png").string().c_str())) {SDL_SetWindowIcon(window_,icon);SDL_DestroySurface(icon);}
         log(std::string("START platform=")+SDL_GetPlatform()+" renderer="+SDL_GetRendererName(renderer_.native()));

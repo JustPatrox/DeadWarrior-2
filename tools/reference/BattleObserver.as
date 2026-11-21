@@ -48,10 +48,10 @@ package {
                 var app:Object=DisplayObjectContainer(root).getChildAt(0);
                 if(!("currentScreen" in app)) return;
                 var request:int=socket.bytesAvailable ? socket.readUnsignedByte() : 0;
-                if((request>=66 && request<=70) || request==72 || request==74 || request==76) {
-                    app.campaign.currentLevel=request==76 ? 8 : request==74 ? 7 : request==72 ? 6 : request-65;
+                if((request>=66 && request<=70) || request==72 || request==74 || request==76 || request==78 || request==80) {
+                    app.campaign.currentLevel=request>=78 ? 9 : request==76 ? 8 : request==74 ? 7 : request==72 ? 6 : request-65;
                     app.campaign.campaignPoints=app.campaign.currentLevel;
-                    app.campaign.difficultyLevel=1;
+                    app.campaign.difficultyLevel=request==80 ? 3 : 1;
                     app.showScreen("campaignGameScreen");
                     return;
                 }
@@ -103,16 +103,42 @@ package {
                             break;
                         }
                     }
+                    // Prepared unit/target positions and disabled macro AI
+                    // isolate original Cat attacks; this is not battle balance.
+                    if((request==79 || request==81) && app.campaign.currentLevel==9) {
+                        gs.doAiUpdates=false;
+                        gs.team.statue.px=3000;
+                        gs.team.statue.x=3000;
+                        if(request==81) {
+                            for(var packIndex:int=0;packIndex<6;++packIndex) {
+                                var packActor:Object=gs.game.unitFactory.getUnit(16);
+                                gs.team.enemyTeam.spawn(packActor,gs.game);
+                                gs.team.enemyTeam.population+=packActor.population;
+                                // Count toward the original pack bonus but stay
+                                // too far away to hit within this short sample.
+                                packActor.px=6200;packActor.py=125;
+                            }
+                        }
+                        for each(var crawlerActor:Object in gs.team.enemyTeam.units) {
+                            if(crawlerActor.type!=16) continue;
+                            crawlerActor.px=3070;crawlerActor.py=gs.game.map.height/2;
+                            gs.team.enemyTeam.attack(true);
+                            crawlerActor.ai.currentTarget=gs.team.statue;
+                            app.stickWar.screenX=app.stickWar.targetScreenX=2700;
+                            break;
+                        }
+                    }
                     camera=int(app.stickWar.screenX);
                     frame=app.stickWar.frame;
                     selected=gs.userInterface.selectedUnits.selected.length;
                     details=gs.team.gold+","+gs.team.mana+","+gs.team.population+","+gs.team.statue.health+","+gs.team.enemyTeam.statue.health+
-                            ","+gs.team.enemyTeam.gold+","+gs.team.enemyTeam.mana+","+int(gs.team.enemyTeam.tech.isResearched(-45))+","+int(gs.doAiUpdates);
+                            ","+gs.team.enemyTeam.gold+","+gs.team.enemyTeam.mana+","+int(gs.team.enemyTeam.tech.isResearched(-45))+","+int(gs.doAiUpdates)+
+                            ","+int(gs.team.enemyTeam.tech.isResearched(-46))+","+int(gs.team.enemyTeam.tech.isResearched(-57));
                     if(request==83) {
                         for each(var team:Object in [gs.team,gs.team.enemyTeam]) {
                             var monument:Object=team.statue;
                             actors+=team.id+","+monument.type+","+int(monument.px)+","+int(monument.py)+","+int(monument.health)+
-                                    ","+monument.pwidth+","+monument.pheight+",0,0,statue;";
+                                    ","+monument.pwidth+","+monument.pheight+","+monument.mc.statue.currentFrame+",0,statue;";
                             for each(var unit:Object in team.units) {
                                 var body:Object=unit.mc;
                                 var pose:String=body.currentLabel;

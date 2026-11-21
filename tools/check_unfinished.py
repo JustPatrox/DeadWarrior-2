@@ -14,7 +14,7 @@ from reference_projector import user,window
 
 ROOT=Path(__file__).resolve().parents[1]
 PLAYABLE=int(re.search(r"playableLevelCount\s*=\s*(\d+)",(ROOT/"src/campaign_progress.hpp").read_text(encoding="utf-8")).group(1))
-OUT=ROOT/"evidence/windows-unfinished"
+OUT=Path(os.environ.get("DW2_TEST_EVIDENCE",ROOT/"evidence/windows-unfinished"))
 OUT.mkdir(parents=True,exist_ok=True)
 EXE=Path(os.environ.get("DW2_TEST_EXE",ROOT/"out/windows-x64/DeadWarrior 2.exe"))
 LOG=EXE.parent/"lastest.log"

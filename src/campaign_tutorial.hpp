@@ -52,7 +52,11 @@ public:
         int enemyDeads{},gutsShots{},poisonHits{},deadsHint{-1},alliedHealers{},cures{},alliedWizards{};
         std::array<int,6> queued{};
         Point deadFront{-1,0};
+        Point crawlerFront{-1,0};
         double furthestMilitary{};
+        int enemyCrawlers{},crawlerHits{};
+        double maxCrawlerDamage{};
+        bool crawlerTech{};
     };
     BattleStatus battleStatus() const;
     struct UnitStatus {int symbol{};Point position;bool enemy{};double health{};int target{};std::string pose;int frame{},cloaked{};bool garrisoned{};};
@@ -165,10 +169,13 @@ private:
     std::array<double,2> median_{};
     static constexpr int ownStatue=-2,opposingStatue=-3,ownWall=-4;
     static constexpr int sword=4922,miner=3104,spearton=6456,archer=4236,ninja=7289,wizard=7926,healer=8233,
-        giant=7025,chaosMiner=7323,enslavedGiant=7526,medusa=8061,dead=8529,bomber=8774,knight=5724;
+        giant=7025,chaosMiner=7323,enslavedGiant=7526,medusa=8061,dead=8529,bomber=8774,knight=5724,crawler=6123;
     static bool isWorker(int symbol) {return symbol==miner || symbol==chaosMiner;}
     int mission_{},ownStatueFrame_{1},enemyStatueFrame_{10},mobileShots_{},hint_{},hintTicks_{};
     bool chaosOpponent_{};
+    bool crawlerTech_{};
+    int crawlerHits_{};
+    double maxCrawlerDamage_{};
     std::vector<int> backgroundLayers_{4102,4098};
     double towerControl_{50};
     std::bitset<CampaignProgress::upgradeCount+1> upgrades_;
@@ -295,6 +302,7 @@ private:
     void drawBoulders(std::vector<std::pair<double,Draw>>&) const;
     void updateKnightController();
     void updateDeadsController();
+    double crawlerDamage(const Unit&) const;
     Point updateDead(Unit&);
     void throwGuts(Unit&);
     void createMiningBlocks();

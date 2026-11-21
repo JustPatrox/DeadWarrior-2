@@ -310,6 +310,7 @@ class Window {
             if (progress_.level>=6 && !assets_.art.contains({8771,1})) assets_.loadTextures(directory_.parent_path()/"bomber");
             if (progress_.level>=7 && !assets_.art.contains({4932,1})) assets_.loadTextures(directory_.parent_path()/"knight");
             if (progress_.level>=8 && !assets_.art.contains({8262,10001})) assets_.loadTextures(directory_.parent_path()/"deads");
+            if (progress_.level>=9 && !assets_.art.contains({5778,1})) assets_.loadTextures(directory_.parent_path()/"crawlers");
             tutorial_=std::make_unique<CampaignTutorial>(assets_,directory_.parent_path(),progress_);
         }
         intermission_.reset();
@@ -464,7 +465,9 @@ class Window {
                                   <<'\t'<<battle.enemyDeads<<'\t'<<battle.gutsShots<<'\t'<<battle.poisonHits<<'\t'<<battle.deadsHint
                                   <<'\t'<<battle.alliedHealers<<'\t'<<battle.cures<<'\t'<<battle.alliedWizards;
                     for(int count:battle.queued) tutorialTrace_<<'\t'<<count;
-                    tutorialTrace_<<'\t'<<battle.deadFront.x<<'\t'<<battle.deadFront.y<<'\t'<<battle.mana<<'\t'<<battle.fighters<<std::endl;
+                    tutorialTrace_<<'\t'<<battle.deadFront.x<<'\t'<<battle.deadFront.y<<'\t'<<battle.mana<<'\t'<<battle.fighters
+                                  <<'\t'<<battle.enemyCrawlers<<'\t'<<battle.crawlerHits<<'\t'<<battle.maxCrawlerDamage
+                                  <<'\t'<<battle.crawlerFront.x<<'\t'<<battle.crawlerFront.y<<std::endl;
                 }
                 auto voice=tutorial_->takeVoice();
                 if (!voice.empty()) {

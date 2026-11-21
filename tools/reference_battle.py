@@ -41,7 +41,7 @@ class BattleReadback:
                                 selected=int(fields[3]),step=fields[4],message=fields[5])
                 if fields[6]:
                     keys=(("level","points") if fields[0]=="postGame" else
-                          ("gold","mana","population","playerStatue","enemyStatue","enemyGold","enemyMana","enemyPoisonTech","aiUpdates"))
+                          ("gold","mana","population","playerStatue","enemyStatue","enemyGold","enemyMana","enemyPoisonTech","aiUpdates","enemyPackTech","enemySpeedTech"))
                     self.state.update(zip(keys,map(float,fields[6].split(","))))
                 if fields[7]:
                     keys=("team","type","x","y","health","width","height","animationFrame","bowAngle")
@@ -80,7 +80,7 @@ class BattleReadback:
         print(name,state,flush=True)
 
 
-def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,magic=False,rebels=False,giants=False,bomber=False,knight=False,deads=False):
+def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,magic=False,rebels=False,giants=False,bomber=False,knight=False,deads=False,crawlers=False,crawlers_insane=False,crawlers_pack=False):
     fixture=diagnostic_copy(Path(__file__).parent/"reference/BattleObserver.as")
     feed=BattleReadback(width,height,reinforce,archidon)
     if shadow:
@@ -103,6 +103,9 @@ def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,ma
         feed.out.mkdir(exist_ok=True,parents=True)
     if deads:
         feed.out=root/"evidence/adobe-deads"
+        feed.out.mkdir(exist_ok=True,parents=True)
+    if crawlers:
+        feed.out=root/("evidence/adobe-crawlers/pack" if crawlers_pack else "evidence/adobe-crawlers/insane" if crawlers_insane else "evidence/adobe-crawlers")
         feed.out.mkdir(exist_ok=True,parents=True)
     class Stream(socketserver.StreamRequestHandler):
         def handle(self):
@@ -158,12 +161,28 @@ def run(width,height,battle=False,reinforce=False,archidon=False,shadow=False,ma
                     def visible(step): return lambda s:s["page"]=="campaignGameScreen" and s["step"]==f"Step #{step}"
                     def settled(name,step,delay=2.5):
                         feed.until(visible(step),45); time.sleep(delay); feed.shot(name,visible(step))
-                    if archidon or shadow or magic or rebels or giants or bomber or knight or deads:
-                        feed.connection.sendall(b"L" if deads else b"J" if knight else b"H" if bomber else b"F" if giants else b"E" if rebels else b"D" if magic else b"C" if shadow else b"B")
+                    if archidon or shadow or magic or rebels or giants or bomber or knight or deads or crawlers:
+                        feed.connection.sendall((b"P" if crawlers_insane else b"N") if crawlers else b"L" if deads else b"J" if knight else b"H" if bomber else b"F" if giants else b"E" if rebels else b"D" if magic else b"C" if shadow else b"B")
                         active=lambda s:s["page"]=="campaignGameScreen"
                         feed.until(active,30)
                         send(0x200,425,225)
                         feed.shot("entry",active)
+                        if crawlers:
+                            time.sleep(2);feed.shot("deployment",active)
+                            assert feed.evidence['deployment']['enemyPackTech']==int(crawlers_insane)
+                            assert feed.evidence['deployment']['enemySpeedTech']==int(crawlers_insane)
+                            feed.connection.sendall(b"Q" if crawlers_pack else b"O")
+                            feed.until(lambda s:active(s) and s['camera']==2700,15)
+                            start=feed.state['frame']
+                            for offset in (1,15,45,90,150,240):
+                                feed.until(lambda s:active(s) and s['frame']>=start+offset,25)
+                                feed.shot('prepared-'+str(offset),active)
+                            assert feed.evidence['prepared-240']['playerStatue']<1500,feed.evidence['prepared-240']
+                            if crawlers_pack:
+                                assert sum(u['type']==16 for u in feed.evidence['prepared-1']['units'])==7
+                                health=[s['playerStatue'] for k,s in feed.evidence.items() if k.startswith('prepared-')]
+                                assert all((1500-h)%10==0 for h in health),health
+                            return
                         if deads:
                             time.sleep(2);feed.shot("deployment",active)
                             feed.connection.sendall(b"M")
@@ -279,4 +298,7 @@ if __name__=="__main__":
     parser.add_argument("--bomber",action="store_true",help="record CampaignBomber entry and a prepared original Giant throw")
     parser.add_argument("--knight",action="store_true",help="record Juggerknight deployment and prepared campaign instruction")
     parser.add_argument("--deads",action="store_true",help="record mobile Dead deployment and a prepared poison target")
-    args=parser.parse_args(); run(args.width,args.height,args.battle,args.reinforce,args.archidon,args.shadow,args.magic,args.rebels,args.giants,args.bomber,args.knight,args.deads)
+    parser.add_argument("--crawlers",action="store_true",help="record original Crawler deployment, collider and statue skins")
+    parser.add_argument("--crawlers-insane",action="store_true",help="record original Insane Crawler speed/pack tech and prepared attacks")
+    parser.add_argument("--crawlers-pack",action="store_true",help="prepare seven original Cats to verify the five-stack int damage cap")
+    args=parser.parse_args(); run(args.width,args.height,args.battle,args.reinforce,args.archidon,args.shadow,args.magic,args.rebels,args.giants,args.bomber,args.knight,args.deads,args.crawlers or args.crawlers_insane or args.crawlers_pack,args.crawlers_insane or args.crawlers_pack,args.crawlers_pack)

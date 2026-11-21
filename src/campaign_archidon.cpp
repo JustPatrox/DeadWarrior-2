@@ -20,7 +20,7 @@ void CampaignTutorial::configureCampaign(const std::filesystem::path& dir,const 
     mission_=progress.level; upgrades_=progress.upgrades;
     backgroundLayers_={4119,4117,4114,4124};
     enemyStatueFrame_=6;
-    const auto levelDir=mission_==8 ? dir.parent_path()/"deads" : mission_==7 ? dir.parent_path()/"knight" : mission_==6 ? dir.parent_path()/"bomber" : mission_==5 ? dir.parent_path()/"giants" : mission_==4 ? dir.parent_path()/"rebels" : mission_==3 ? dir.parent_path()/"magic" :
+    const auto levelDir=mission_==9 ? dir.parent_path()/"crawlers" : mission_==8 ? dir.parent_path()/"deads" : mission_==7 ? dir.parent_path()/"knight" : mission_==6 ? dir.parent_path()/"bomber" : mission_==5 ? dir.parent_path()/"giants" : mission_==4 ? dir.parent_path()/"rebels" : mission_==3 ? dir.parent_path()/"magic" :
         mission_==2 ? dir.parent_path()/"shadow" : dir;
     std::ifstream starting(levelDir/"starting.tsv");
     std::string key;
@@ -56,13 +56,19 @@ void CampaignTutorial::configureCampaign(const std::filesystem::path& dir,const 
             if (mission_>=7) {
                 readRules(dir.parent_path()/"knight");backgroundLayers_={4094,4080,4087,4091,4084};
                 if (mission_>=8) {
-                    readRules(levelDir);backgroundLayers_={4102,4098};enemyStatueFrame_=3;
+                    readRules(dir.parent_path()/"deads");backgroundLayers_={4102,4098};enemyStatueFrame_=3;
+                }
+                if(mission_>=9) {
+                    readRules(levelDir);backgroundLayers_={4119,4117,4114,4124};enemyStatueFrame_=11;
+                    std::ifstream crawlerTips(levelDir/"tips.tsv");int body,frame;Point tip;
+                    while(crawlerTips>>body>>frame>>tip.x>>tip.y) tips_[{body,frame}]=tip;
+                    if(!crawlerTips.is_open() || !crawlerTips.eof()) throw std::runtime_error("Invalid Crawler hit markers");
                 }
                 std::ifstream available(levelDir/"available.tsv");
                 std::vector<std::string> names;
                 while (available>>key) names.push_back(key);
                 if (!available.is_open() || !available.eof()) throw std::runtime_error("Invalid Chaos recruitment manifest");
-                for (const auto& entry:std::array<EnemyBuild,4>{{{giant,5,"Giant"},{knight,1,"Knight"},{dead,2,"Dead"},{bomber,1,"Bomber"}}})
+                for (const auto& entry:std::array<EnemyBuild,5>{{{giant,5,"Giant"},{knight,1,"Knight"},{crawler,1,"Cat"},{dead,2,"Dead"},{bomber,1,"Bomber"}}})
                     if (std::find(names.begin(),names.end(),entry.name)!=names.end()) enemyBuild_.push_back(entry);
                 std::ifstream knightTips(dir.parent_path()/"knight"/"tips.tsv");
                 int body,frame;Point tip;
@@ -106,7 +112,7 @@ void CampaignTutorial::configureCampaign(const std::filesystem::path& dir,const 
         if (team!="player" && team!="oponent") throw std::runtime_error("Invalid starting team");
         const int type=name=="Miner" ? miner : name=="Swordwrath" ? sword : name=="Archidon" ? archer :
             name=="Monk" ? healer : name=="Ninja" ? ninja : name=="Magikill" ? wizard : name=="Spearton" ? spearton :
-            name=="ChaosMiner" ? chaosMiner : name=="Giant" ? giant : name=="Bomber" ? bomber : name=="EnslavedGiant" ? enslavedGiant : name=="Knight" ? knight : name=="Dead" ? dead : 0;
+            name=="ChaosMiner" ? chaosMiner : name=="Giant" ? giant : name=="Bomber" ? bomber : name=="EnslavedGiant" ? enslavedGiant : name=="Knight" ? knight : name=="Dead" ? dead : name=="Cat" ? crawler : 0;
         if (!type) throw std::runtime_error("Unsupported starting unit");
         groups[team=="oponent"].push_back(type);
     }

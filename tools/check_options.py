@@ -15,7 +15,7 @@ from native_client import capture_from_game
 ROOT=Path(__file__).resolve().parents[1]
 PLAYABLE=int(re.search(r"playableLevelCount\s*=\s*(\d+)",(ROOT/"src/campaign_progress.hpp").read_text(encoding="utf-8")).group(1))
 EXE=Path(os.environ.get("DW2_TEST_EXE",ROOT/"out/windows-x64/DeadWarrior 2.exe"))
-OUT=ROOT/"evidence/windows-options"
+OUT=Path(os.environ.get("DW2_TEST_EVIDENCE",ROOT/"evidence/windows-options"))
 
 
 def run():

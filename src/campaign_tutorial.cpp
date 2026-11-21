@@ -124,12 +124,15 @@ int CampaignTutorial::spawn(int symbol,Point p,bool enemy) {
     const auto& pose=animations_.at({symbol,"stand"});
     const auto& bounds=art_.texture(pose.symbol,pose.frameBase+1).bounds;
     u.width=bounds.w; u.height=bounds.h;
+    if(symbol==crawler) {u.width=stat(u,"hitWidth");u.height=stat(u,"hitHeight");}
     units_.push_back(u);
     if (symbol==enslavedGiant || (symbol==giant && mission_>=6))
         sound("GiantGrowl"+std::to_string(1+soundSequence_++%6),p);
     return int(units_.size())-1;
 }
 double CampaignTutorial::stat(const Unit& u,const char* name) const {
+    if(u.symbol==crawler && std::string_view(name)=="maxVelocity")
+        return stat(crawler,u.enemy && crawlerTech_ ? "maxVelocity" : "slowMaxVelocity");
     if (!u.enemy && u.symbol==miner && upgrades_[5]) {
         if (std::string_view(name)=="health") return stat(miner,"upgradedHealth");
         if (std::string_view(name)=="maxVelocity") return stat(miner,"upgradedMaxVelocity");
@@ -139,7 +142,7 @@ double CampaignTutorial::stat(const Unit& u,const char* name) const {
 double CampaignTutorial::stat(int symbol,const char* name) const {
     const char* prefix=symbol==miner ? "miner." : symbol==spearton ? "spearton." : symbol==archer ? "archer." : symbol==ninja ? "ninja." :
         symbol==wizard ? "magikill." : symbol==healer ? "monk." : symbol==chaosMiner ? "chaosMiner." :
-        symbol==giant ? "giant." : symbol==enslavedGiant ? "enslavedGiant." : symbol==medusa ? "medusa." : symbol==dead ? "dead." : symbol==bomber ? "bomber." : symbol==knight ? "knight." : "swordwrath.";
+        symbol==giant ? "giant." : symbol==enslavedGiant ? "enslavedGiant." : symbol==medusa ? "medusa." : symbol==dead ? "dead." : symbol==bomber ? "bomber." : symbol==knight ? "knight." : symbol==crawler ? "cat." : "swordwrath.";
     if (std::string_view(name)=="hitWidth" || std::string_view(name)=="hitHeight") {
         if (const auto found=rules_.find(std::string(prefix)+name);found!=rules_.end()) return found->second;
         const auto& pose=animations_.at({symbol,"stand"});
@@ -225,7 +228,8 @@ void CampaignTutorial::updateUnit(Unit& u) {
         }
         if (!u.deadCounted) {
             (u.enemy ? enemyPopulation_ : population_)-=int(stat(u,"population")); u.deadCounted=true;
-            sound(u.symbol==wizard ? "MagikillDeath" : "Pain"+std::to_string(1+soundSequence_++%8),u.position);
+            sound(u.symbol==crawler ? "CrawlerDeath"+std::to_string(1+soundSequence_++%3) :
+                  u.symbol==wizard ? "MagikillDeath" : "Pain"+std::to_string(1+soundSequence_++%8),u.position);
         }
         if (!u.pose.starts_with("death_")) {
             int variant=u.symbol==sword ? random()%3+1 : 1;
@@ -259,7 +263,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
             if (std::abs(dx)<reach && std::abs(dy)<40 && u.facing==facing) {
                 if (u.symbol==bomber) {u.hp=0;return;}
                 animate(u,u.symbol==knight ? "attack_"+std::to_string(random()%3+1) :
-                    (u.symbol!=sword && u.symbol!=ninja && u.symbol!=giant) || random()%2==0 ? "attack_1" : "attack_2"); u.hit=false;
+                    (u.symbol!=sword && u.symbol!=ninja && u.symbol!=giant && u.symbol!=crawler) || random()%2==0 ? "attack_1" : "attack_2"); u.hit=false;
                 u.targetsHit=0;
                 if (u.symbol==ninja) sound("ninjaSwipe"+std::to_string(1+soundSequence_++%4),u.position);
                 else if (u.symbol==sword || u.symbol==spearton || isWorker(u.symbol)) sound("swordwrathSwing1",u.position);
@@ -308,6 +312,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
                 const double modifier=(!statue && target.enemy && difficulty_==Difficulty::Normal) ? rules_.at("normalHealthScale") : 1;
                 const double bonus=stat(u,!statue && !wall && stat(target,"armoured")!=0 ? "toArmour" : "toNotArmour");
                 double damage=stat(u,"damage")+bonus;
+                if(u.symbol==crawler) {damage=crawlerDamage(u);++crawlerHits_;maxCrawlerDamage_=std::max(maxCrawlerDamage_,damage);}
                 if (u.symbol==ninja) {
                     if (u.lastVictim!=u.target || ticks_-u.lastHitTick>stat(u,"fury.furyEffect")) u.furyStacks=0;
                     damage+=u.furyStacks*stat(u,"fury.bonus");
@@ -323,7 +328,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
                 if (mission_>=3) applyMagicDamage(target,damage,u.enemy);
                 else target.hp=std::max(0.,target.hp-damage/modifier);
                 impactSound(target);
-                if (u.symbol==knight) sound("sword1",u.position);
+                if (u.symbol==knight || u.symbol==crawler) sound("sword1",u.position);
                 u.hit=true;
             }
         }
@@ -668,10 +673,12 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         const auto key="layer."+std::to_string(symbol)+".width";
         const double width=rules_.contains(key) ? rules_.at(key) : art_.texture(symbol).bounds.w;
         const double offset=camera_/(length_-legacyWidth)*(width-legacyWidth);
-        if (symbol==4094) {
-            // Desert's flat sky includes one moon near its right edge.
-            // Continue its authored color without reflecting a second moon.
-            out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::width,Viewport::height},0x2d2d4b));
+        if (symbol==4094 || symbol==4119) {
+            // Continue the authored opaque sky under the rasterized edge.
+            // Forest's last antialiased column must not become a translucent
+            // side extension; Desert's moon must not be reflected either.
+            const unsigned color=symbol==4094 ? 0x2d2d4b : 0x00234b;
+            out.push_back(Draw::shape(Draw::Kind::Box,{Viewport::left,0,Viewport::width,Viewport::height},color));
             out.push_back(sprite(symbol,1,{-offset,0}));
         } else if(symbol==backgroundLayers_.front() || symbol==backgroundLayers_.back()) {
             auto image=sprite(symbol,1,{-offset,0});

@@ -30,6 +30,8 @@ STEPS = (
     ("build_archidon_map.py", "--level", "9"),
     ("build_dead_assets.py",),
     ("build_archidon_map.py", "--level", "10"),
+    ("build_crawler_assets.py",),
+    ("build_archidon_map.py", "--level", "11"),
     ("build_interaction_assets.py",),
     ("build_interface_assets.py",),
     ("build_castle_assets.py",),

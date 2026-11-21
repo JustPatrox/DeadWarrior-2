@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>A native port of Stick War 2. Work in progress.</strong><br>
-  C++20 · Windows · macOS · Linux · 16:9 presentation
+  C++20 Â· Windows Â· macOS Â· Linux Â· 16:9 presentation
 </p>
 
 <p align="center">
@@ -15,11 +15,11 @@
 </p>
 
 <p align="center">
-  <a href="#current-status">Status</a> ·
-  <a href="#download-and-play">Download</a> ·
-  <a href="#build-from-source">Build</a> ·
-  <a href="#pc-controls">Controls</a> ·
-  <a href="https://github.com/JustPatrox/DeadWarrior-2/issues/new/choose">Report a bug</a> ·
+  <a href="#current-status">Status</a> Â·
+  <a href="#download-and-play">Download</a> Â·
+  <a href="#build-from-source">Build</a> Â·
+  <a href="#pc-controls">Controls</a> Â·
+  <a href="https://github.com/JustPatrox/DeadWarrior-2/issues/new/choose">Report a bug</a> Â·
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
@@ -33,11 +33,11 @@ This project is not affiliated with Max Games or the original game's creators. S
 
 ## Current status
 
-**Development build: the full campaign has not been ported yet.** Nine missions are accessible, through Undead War (Deadly Deads). Unimplemented sections display a work-in-progress screen with restart and quit options.
+**Development build: the full campaign has not been ported yet.** Ten missions are accessible, through Crawlers Attack. Unimplemented sections display a work-in-progress screen with restart and quit options.
 
 | Feature | Status |
 | --- | --- |
-| Menus, tutorial, and first nine missions | Implemented; full parity is still under review |
+| Menus, tutorial, and first ten missions | Implemented; full parity is still under review |
 | Campaign progress, upgrades, and saves | Implemented for the current content |
 | 16:9 rendering, audio, and contextual cursors | Implemented |
 | Windowed, borderless window, and fullscreen modes | Insert on Windows/Linux; Option on macOS |
@@ -55,7 +55,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 ## Download and play
 
-**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.7)**
+**[Download the development preview](https://github.com/JustPatrox/DeadWarrior-2/releases/tag/v0.0.0-preview.8)**
 
 | Platform | Release asset | Start |
 | --- | --- | --- |
@@ -66,7 +66,7 @@ Source CI checks Windows compilation and Python tools. The release workflow buil
 
 All packages include assets. Keep Linux/Windows assets beside the executable; macOS keeps them inside the app. macOS builds have an ad-hoc integrity signature, without Developer ID notarization. Linux builds target Ubuntu 22.04 or newer compatible distributions (glibc 2.35+), with desktop graphics and audio libraries.
 
-This is an unfinished campaign preview with nine missions; it is not the complete game. All four native packages use the same campaign sources and prepared content. Automated checks are supplemented by ongoing gameplay validation.
+This is an unfinished campaign preview with ten missions; it is not the complete game. All four native packages use the same campaign sources and prepared content. Automated checks are supplemented by ongoing gameplay validation.
 
 ## Build from source
 
@@ -93,13 +93,13 @@ See the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md
 | **Esc** | Close PC settings or pause/resume the battle |
 | **P** | Pause/resume the battle |
 
-The larger **PC** label keeps the original font and button artwork. The original **PC** toolbar button also opens settings. Use **Insert → Show FPS → On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. Cursor lock confines the pointer during an active battle and releases it for pause, settings, focus loss, and minimization. **Stretched** fills the display; **Dynamic [Experimental]** expands the logical camera and adapts the HUD, terrain, fog, and minimap. The default remains **16:9**. Borderless covers the full monitor. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
+The larger **PC** label keeps the original font and button artwork. The original **PC** toolbar button also opens settings. Use **Insert â†’ Show FPS â†’ On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. Cursor lock confines the pointer during an active battle and releases it for pause, settings, focus loss, and minimization. **Stretched** fills the display; **Dynamic [Experimental]** expands the logical camera and adapts the HUD, terrain, fog, and minimap. The default remains **16:9**. Borderless covers the full monitor. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
 
 See the [preview.6 fixes and validation](docs/todo-checkpoint.md) for the completed TODO items and test scope.
 
 ## Reporting a problem
 
-Open [a bug report](https://github.com/JustPatrox/DeadWarrior-2/issues/new?template=bug_report.yml) with reproduction steps, resolution, display mode, and version or commit. Attach **`lastest.log`** — that spelling is intentional. It is replaced on each launch and normally sits next to the executable. If that directory is not writable, it is stored in `%LOCALAPPDATA%\DeadWarrior 2`.
+Open [a bug report](https://github.com/JustPatrox/DeadWarrior-2/issues/new?template=bug_report.yml) with reproduction steps, resolution, display mode, and version or commit. Attach **`lastest.log`** â€” that spelling is intentional. It is replaced on each launch and normally sits next to the executable. If that directory is not writable, it is stored in `%LOCALAPPDATA%\DeadWarrior 2`.
 
 Review logs for personal paths before posting them. Do not attach the SWF, extracted resources, or saves containing information you do not want to share.
 
@@ -107,4 +107,4 @@ Review logs for personal paths before posting them. Do not attach the SWF, extra
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), the [Windows guide](docs/windows.md), and the [translation traceability](docs/traceability.md). Simulation code lives in `src/campaign_*` and `src/tutorial_*`; `src/windows_*` handles the platform. Preparation and verification tools live in `tools/`.
 
-<p align="center"><img src="icon.png" alt="DeadWarrior 2 helmet" width="72"><br><sub>DeadWarrior 2 · Work in progress</sub></p>
+<p align="center"><img src="icon.png" alt="DeadWarrior 2 helmet" width="72"><br><sub>DeadWarrior 2 Â· Work in progress</sub></p>

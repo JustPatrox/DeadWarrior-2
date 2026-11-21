@@ -56,7 +56,7 @@ def run(width,height):
                     lines=trace.read_text(encoding='utf-8').splitlines() if trace.exists() else []
                     if not lines:return {}
                     values=lines[-1].split('\t')
-                    if len(values)==len(COLUMNS):return dict(zip(COLUMNS,map(float,values)))
+                    if len(values)>=len(COLUMNS):return dict(zip(COLUMNS,map(float,values)))
                     return {'step':int(values[0]),'frame':int(values[1]),'saved':int(values[5]) if len(values)>5 else 0}
 
                 def wait(check,limit=20):

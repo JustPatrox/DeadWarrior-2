@@ -41,7 +41,12 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
     }
     BattleStatus status{goldBalance_,mana_,population_,int(production_[0][0].units.size()),
         int(production_[0][1].units.size()),workers,fighters,statues_[0].hp,statues_[1].hp,reinforcement_};
+    status.crawlerHits=crawlerHits_;status.maxCrawlerDamage=maxCrawlerDamage_;status.crawlerTech=crawlerTech_;
     for (const auto& u:units_) if (u.hp>0) {
+        if(u.enemy && u.symbol==crawler) {
+            ++status.enemyCrawlers;
+            if(status.crawlerFront.x<0 || u.position.x<status.crawlerFront.x) status.crawlerFront=u.position;
+        }
         if (!u.enemy && !isWorker(u.symbol)) {status.fighterHealth+=u.hp;status.furthestMilitary=std::max(status.furthestMilitary,u.position.x);}
         if (!u.enemy && u.symbol==sword && mission_ && u.rageCounter<rules_.at("rage.effect")) ++status.activeRage;
         if (!u.enemy && u.symbol==spearton) ++status.lancers;
@@ -252,6 +257,7 @@ void CampaignTutorial::orderArmy(bool enemy,ArmyOrder order,double destination) 
 }
 
 void CampaignTutorial::updateOpponent() {
+    if(chaosOpponent_ && difficulty_==Difficulty::Insane) crawlerTech_=true;
     std::array<int,2> military{};
     std::array<std::vector<double>,2> positions;
     std::vector<Unit*> working,praying;
