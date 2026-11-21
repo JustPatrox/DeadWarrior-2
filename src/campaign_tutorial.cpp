@@ -769,8 +769,9 @@ std::vector<Draw> CampaignTutorial::drawList() const {
                                      u.selected ? 0x00ff00 : 0,u.selected ? .3 : .2));
         if (u.symbol==archer && u.hp>0) drawArcher(layers,u);
         else {
-            const double perspective=rules_.at("backScale")+u.position.y/depth_*(rules_.at("frontScale")-rules_.at("backScale"));
-            auto character=sprite(seq.symbol,u.frame+seq.frameBase,{x+u.facing*seq.origin.x*size,y-u.altitude*perspective+seq.origin.y*size},size,u.facing<0);
+            // Unit.updateMotion applies flyingHeight to _perspectiveScale,
+            // which already contains the unit's own scale (Medusa is 1.2).
+            auto character=sprite(seq.symbol,u.frame+seq.frameBase,{x+u.facing*seq.origin.x*size,y-u.altitude*size+seq.origin.y*size},size,u.facing<0);
             character.redOffset=u.tint>=0 ? u.tint : u.enemy ? 75 : 0;
             if (u.symbol==ninja && u.pose=="run") {
                 for (int copy:{2,1}) {
@@ -786,7 +787,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         }
         if (u.hp>0) {
             const double w=30*1.3*size,h=7.5*1.2*size;
-            const Rect bar{x-w/2,y-u.height*size*1.2-h/2,w,h};
+            const Rect bar{x-w/2,y-u.altitude*size-u.height*size*1.2-h/2,w,h};
             if (u.poison>0) layer(sprite(1168,1+ticks_%int(rules_.at("poison.frames")),{x,bar.y-20*size},size));
             layer(Draw::shape(Draw::Kind::Box,bar,0));
             layer(Draw::shape(Draw::Kind::Box,{bar.x+.7,bar.y+.7,(w-1.4)*u.hp/u.maxHp,h-1.4},0x00ff00));

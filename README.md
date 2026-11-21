@@ -95,7 +95,7 @@ See the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md
 
 The larger **PC** label keeps the original font and button artwork. The original **PC** toolbar button also opens settings. Use **Insert â†’ Show FPS â†’ On** to display the counter in the top-left corner. Frame-rate settings affect presentation while preserving the simulation rate. The resolution selector offers Auto, 720p, 900p, 1080p, 1440p, and 2160p. Cursor lock confines the pointer during an active battle and releases it for pause, settings, focus loss, and minimization. **Stretched** fills the display; **Dynamic [Experimental]** expands the logical camera and adapts the HUD, terrain, fog, and minimap. The default remains **16:9**. Borderless covers the full monitor. PC settings are saved automatically in `%LOCALAPPDATA%\DeadWarrior 2\options.ini`; deleting a campaign save keeps these preferences.
 
-See the [preview.6 fixes and validation](docs/todo-checkpoint.md) for the completed TODO items and test scope. The [economy and orders correction](docs/economy-orders-fix.md) documents finite gold, miner retargeting, original castle defenders, and defensive formation behavior.
+See the [preview.6 fixes and validation](docs/todo-checkpoint.md) for the completed TODO items and test scope. The [economy and orders correction](docs/economy-orders-fix.md) documents finite gold, miner retargeting, original castle defenders, and defensive formation behavior. The [Giant rendering and Medusa staging fix](docs/giant-rendering-fix.md) covers denser original artwork, bounded animation prefetching, and the original cinematic flight height.
 
 ## Reporting a problem
 

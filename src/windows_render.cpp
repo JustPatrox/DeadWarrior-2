@@ -9,6 +9,12 @@
 #include <algorithm>
 #include <cmath>
 #include <tuple>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <set>
+#include <thread>
 
 using Microsoft::WRL::ComPtr;
 using sw2::Draw;
@@ -33,6 +39,69 @@ namespace {
 D2D1_RECT_F rectangle(Rect r) {
     return D2D1::RectF(float(r.x),float(r.y),float(r.x+r.w),float(r.y+r.h));
 }
+using TextureKey=std::pair<std::filesystem::path,int>;
+struct PngPixels {UINT width{},height{};std::vector<BYTE> bgra;};
+bool decodePixels(const TextureKey& key,PngPixels& out) {
+    gd::Bitmap image(key.first.c_str());
+    if(image.GetLastStatus()!=gd::Ok)return false;
+    out.width=image.GetWidth();out.height=image.GetHeight();
+    if(!out.width || !out.height || size_t(out.width)*out.height>64*1024*1024)return false;
+    const gd::Rect region(0,0,int(out.width),int(out.height));gd::BitmapData data;
+    if(image.LockBits(&region,gd::ImageLockModeRead,key.second ? PixelFormat32bppARGB : PixelFormat32bppPARGB,&data)!=gd::Ok)return false;
+    out.bgra.resize(size_t(out.width)*out.height*4);
+    for(UINT y=0;y<out.height;++y) {
+        auto* source=static_cast<const BYTE*>(data.Scan0)+ptrdiff_t(y)*data.Stride;
+        auto* dest=out.bgra.data()+size_t(y)*out.width*4;
+        if(!key.second)std::copy_n(source,size_t(out.width)*4,dest);
+        else for(UINT x=0;x<out.width;++x,source+=4,dest+=4) {
+            const int alpha=source[3];
+            dest[0]=BYTE((source[0]*alpha+127)/255);dest[1]=BYTE((source[1]*alpha+127)/255);
+            dest[2]=BYTE((std::min(255,source[2]+key.second)*alpha+127)/255);dest[3]=source[3];
+        }
+    }
+    image.UnlockBits(&data);return true;
+}
+// Only decoding and the original color transform run here. All Direct2D
+// resources stay on the window thread; a missed prediction still draws the
+// exact requested frame synchronously, never skips or substitutes a pose.
+class PngPrefetch {
+    std::mutex mutex_;std::condition_variable changed_;bool stop_{};
+    std::deque<TextureKey> jobs_;std::set<TextureKey> pending_;
+    std::map<TextureKey,PngPixels> ready_;size_t bytes_{};
+    std::thread worker_;
+    void run() {
+        for(;;) {
+            TextureKey key;
+            {std::unique_lock lock(mutex_);changed_.wait(lock,[&]{return stop_ || !jobs_.empty();});
+             if(stop_)return;key=jobs_.front();jobs_.pop_front();}
+            PngPixels pixels;bool ok=false;
+            try {ok=decodePixels(key,pixels);}catch(const std::exception&){}
+            std::lock_guard lock(mutex_);pending_.erase(key);if(stop_)return;
+            if(!ok)continue;
+            constexpr size_t budget=32*1024*1024;
+            while(bytes_+pixels.bgra.size()>budget && !ready_.empty()) {
+                bytes_-=ready_.begin()->second.bgra.size();ready_.erase(ready_.begin());
+            }
+            if(pixels.bgra.size()<=budget) {bytes_+=pixels.bgra.size();ready_.emplace(std::move(key),std::move(pixels));}
+        }
+    }
+public:
+    explicit PngPrefetch(bool enabled) {
+        if(enabled)try {worker_=std::thread([this]{run();});}catch(const std::system_error&){}
+    }
+    ~PngPrefetch() {{std::lock_guard lock(mutex_);stop_=true;}changed_.notify_one();if(worker_.joinable())worker_.join();}
+    void request(TextureKey key) {
+        if(!worker_.joinable())return; // Decoding remains available synchronously.
+        {std::lock_guard lock(mutex_);
+         if(jobs_.size()>=64 || pending_.contains(key) || ready_.contains(key))return;
+         pending_.insert(key);jobs_.push_back(std::move(key));}
+        changed_.notify_one();
+    }
+    bool take(const TextureKey& key,PngPixels& pixels) {
+        std::lock_guard lock(mutex_);auto found=ready_.find(key);if(found==ready_.end())return false;
+        bytes_-=found->second.bgra.size();pixels=std::move(found->second);ready_.erase(found);return true;
+    }
+};
 }
 
 struct HardwareRenderer::Device {
@@ -53,10 +122,14 @@ struct HardwareRenderer::Device {
     std::map<std::pair<double,bool>,ComPtr<IDWriteTextFormat>> formats;
     size_t textureBytes{};
     unsigned frame{};
+    PngPrefetch prefetch;
+    bool prefetchEnabled{};
+    size_t loads{},evictions{},prefetched{};
+    double decodeMs{};
     bool available{};
     bool synchronized{};
 
-    explicit Device(const sw2::MenuAssets& a):assets(a),compositor(a,loadWindowsPng) {
+    explicit Device(const sw2::MenuAssets& a,bool predict):assets(a),compositor(a,loadWindowsPng),prefetch(predict),prefetchEnabled(predict) {
         available=SUCCEEDED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,factory.GetAddressOf())) &&
             SUCCEEDED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),
                                           reinterpret_cast<IUnknown**>(fonts.GetAddressOf())));
@@ -116,44 +189,38 @@ struct HardwareRenderer::Device {
             found->second.used=frame;
             return found->second.bitmap.Get();
         }
-        gd::Bitmap image(assets.texture(d.symbol,d.frame).file.c_str());
-        if (image.GetLastStatus()!=gd::Ok) return nullptr;
-        const auto size=D2D1::SizeU(image.GetWidth(),image.GetHeight());
-        if (std::max(size.width,size.height)>target->GetMaximumBitmapSize()) return nullptr;
-        const gd::Rect region(0,0,int(size.width),int(size.height));
-        gd::BitmapData data;
-        const auto format=d.redOffset ? PixelFormat32bppARGB : PixelFormat32bppPARGB;
-        if (image.LockBits(&region,gd::ImageLockModeRead,format,&data)!=gd::Ok) return nullptr;
-        const size_t pitch=size_t(size.width)*4;
-        auto* pixels=static_cast<const BYTE*>(data.Scan0);
-        std::vector<BYTE> converted;
-        if (data.Stride<0 || d.redOffset) {
-            converted.resize(pitch*size.height);
-            for (UINT y=0;y<size.height;++y) {
-                const BYTE* row=pixels+ptrdiff_t(y)*data.Stride;
-                BYTE* out=converted.data()+y*pitch;
-                if (!d.redOffset) std::copy_n(row,pitch,out);
-                else for (UINT x=0;x<size.width;++x,row+=4,out+=4) {
-                    const int a=row[3];
-                    out[0]=BYTE((row[0]*a+127)/255);
-                    out[1]=BYTE((row[1]*a+127)/255);
-                    out[2]=BYTE((std::min(255,row[2]+d.redOffset)*a+127)/255);
-                    out[3]=row[3];
-                }
-            }
-            pixels=converted.data();
-        }
+        const auto started=std::chrono::steady_clock::now();
+        PngPixels pixels;
+        const bool predicted=prefetchEnabled && prefetch.take(key,pixels);
+        if(!predicted && !decodePixels(key,pixels))return nullptr;
+        if(std::max(pixels.width,pixels.height)>target->GetMaximumBitmapSize())return nullptr;
         Texture entry;
-        const auto properties=D2D1::BitmapProperties(D2D1::PixelFormat(
-            DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED));
-        const auto stride=converted.empty() ? UINT(data.Stride) : UINT(pitch);
-        const HRESULT hr=target->CreateBitmap(size,pixels,stride,properties,entry.bitmap.GetAddressOf());
-        image.UnlockBits(&data);
-        if (FAILED(hr)) return nullptr;
-        entry.bytes=pitch*size.height;
-        entry.used=frame;
-        textureBytes+=entry.bytes;
-        return textures.emplace(key,std::move(entry)).first->second.bitmap.Get();
+        const auto properties=D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED));
+        const HRESULT hr=target->CreateBitmap(D2D1::SizeU(pixels.width,pixels.height),pixels.bgra.data(),pixels.width*4,properties,entry.bitmap.GetAddressOf());
+        decodeMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();++loads;
+        if(predicted)++prefetched;
+        if(FAILED(hr))return nullptr;
+        entry.bytes=pixels.bgra.size();entry.used=frame;textureBytes+=entry.bytes;
+        const auto inserted=textures.emplace(key,std::move(entry)).first;
+        predict(d);
+        return inserted->second.bitmap.Get();
+    }
+
+    void predict(const Draw& d) {
+        if(!prefetchEnabled || d.children)return;
+        switch(d.symbol) {
+        case 6465:case 6550:case 6730:case 6815:case 7024:
+        case 7388:case 7519:case 7525:case 7514:break;
+        default:return;
+        }
+        int next=d.frame;
+        for(int i=0;i<8;++i) {
+            auto found=assets.art.find({d.symbol,++next});
+            if(found==assets.art.end()) {next=1;found=assets.art.find({d.symbol,next});}
+            if(found==assets.art.end())break;
+            TextureKey key{found->second.file,d.redOffset};
+            if(!textures.contains(key))prefetch.request(std::move(key));
+        }
     }
 
     void trimTextures() {
@@ -168,6 +235,7 @@ struct HardwareRenderer::Device {
         for (auto it:candidates) {
             textureBytes-=it->second.bytes;
             textures.erase(it);
+            ++evictions;
             if (textureBytes<=budget) break;
         }
     }
@@ -215,7 +283,10 @@ struct HardwareRenderer::Device {
     }
 };
 
-HardwareRenderer::HardwareRenderer(const sw2::MenuAssets& assets):device_(std::make_unique<Device>(assets)) {}
+HardwareRenderer::HardwareRenderer(const sw2::MenuAssets& assets,bool predict):device_(std::make_unique<Device>(assets,predict)) {}
+HardwareRenderer::Statistics HardwareRenderer::statistics() const {
+    return {device_->textureBytes,device_->textures.size(),device_->loads,device_->evictions,device_->prefetched,device_->decodeMs};
+}
 HardwareRenderer::~HardwareRenderer()=default;
 bool HardwareRenderer::synchronized() const { return device_->target && device_->synchronized; }
 SIZE HardwareRenderer::pixelSize() const {

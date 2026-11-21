@@ -209,6 +209,7 @@ class Window {
     bool diagnostic_{},forceSoftware_{};
     std::unique_ptr<gd::Bitmap> buffer_;
     Clock::time_point gameDeadline_{},lastPaint_{},lastArmySelect_{};
+    Clock::time_point lastPerformanceLog_{};
     std::deque<Clock::time_point> presentedFrames_;
     double measuredFps_{};
     Point mouse_{-1,-1};
@@ -551,6 +552,7 @@ class Window {
         GetClientRect(hwnd_,&r);
         if (r.right<=0 || r.bottom<=0 || (present && IsIconic(hwnd_))) return;
         const auto start=Clock::now();
+        const auto beforeTextures=hardware_.statistics();
         const auto draws=scene();
         const auto [rw,rh]=display_.renderSize(r.right,r.bottom);
         const bool accelerated=present && !showingNotice_ && !forceSoftware_ &&
@@ -571,6 +573,15 @@ class Window {
             else measuredFps_=0;
             const auto ms=[](Clock::duration d){ return std::chrono::duration<double,std::milli>(d).count(); };
             const double interval=lastPaint_==Clock::time_point{} ? 0. : ms(end-lastPaint_);
+            if((ms(end-start)>50 || interval>100) && end-lastPerformanceLog_>std::chrono::seconds(2)) {
+                const auto textures=hardware_.statistics();
+                logEvent("RENDER hitch render_ms="+std::to_string(ms(end-start))+" interval_ms="+std::to_string(interval)+
+                    " gpu="+std::to_string(accelerated)+" texture_uploads="+std::to_string(textures.loads-beforeTextures.loads)+
+                    " prefetched="+std::to_string(textures.prefetched-beforeTextures.prefetched)+
+                    " blocking_load_ms="+std::to_string(textures.decodeMs-beforeTextures.decodeMs)+
+                    " simulation_tick="+std::to_string(tutorial_ ? tutorial_->ticks() : -1));
+                lastPerformanceLog_=end;
+            }
             if (frameTiming_.is_open()) frameTiming_<<interval<<'\t'<<ms(end-start)<<'\t'<<accelerated<<'\t'
                         <<(showingNotice_ ? "notice" : tutorial_ && (pause_.isOpen() || display_.isOpen()) ? "paused" : tutorial_ ? "battle" : intermission_ ? "map" : "menu")
                         <<'\t'<<display_.frameLimit()<<'\t'<<(tutorial_ ? tutorial_->ticks() : -1)

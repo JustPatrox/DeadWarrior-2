@@ -3,6 +3,7 @@ import argparse
 import ctypes as ct
 from ctypes import wintypes as wt
 import json
+import csv
 import os
 from pathlib import Path
 import subprocess
@@ -15,7 +16,7 @@ from reference_projector import user,window
 ROOT=Path(__file__).resolve().parents[1]
 
 def run(width,height):
-    out=ROOT/"evidence/windows-giants"
+    out=Path(os.environ.get("DW2_TEST_OUT",ROOT/"evidence/windows-giants"))
     out.mkdir(exist_ok=True,parents=True)
     prefix=f"{width}x{height}"
     trace=out/f"{prefix}-steps.tsv"
@@ -57,6 +58,7 @@ def run(width,height):
                     image=capture_from_game(hwnd,capture)
                     image.save(out/f"{prefix}-{name}.png")
                     assert not np.any(np.all(np.asarray(image)==[255,0,255],axis=2)),name
+                    return image
                 time.sleep(11)
                 click(161,664); time.sleep(1.2); click(578,664)
                 wait(lambda r:r[0]=="101" and r[1]=="298")
@@ -69,7 +71,7 @@ def run(width,height):
                 wait(lambda r:int(r[7])>=0)
                 shot("castle-left")
                 click(554,582)
-                seen=set(); attacked=False; next_order=0; start=-1
+                seen=set(); attacked=False; next_order=0; start=-1;medusa_pixels={}
                 until=time.monotonic()+160
                 while time.monotonic()<until:
                     current=row(); tick=int(current[1]); step=int(current[0])
@@ -82,12 +84,30 @@ def run(width,height):
                         dialogue=int(current[33])
                         assert current[16]=="0",current
                         if dialogue>=0 and dialogue not in seen:
-                            seen.add(dialogue); shot(f"dialogue-{dialogue+1}")
+                            seen.add(dialogue); image=shot(f"dialogue-{dialogue+1}")
+                            if dialogue<3:
+                                scale=height/700
+                                # Original yellow cape above the battlement;
+                                # exclude the HUD, message border and her eyes.
+                                x1=round(width/2+(735-425)*scale);x2=round(width/2+(790-425)*scale)
+                                pixels=np.asarray(image)[round(55*scale):round(135*scale),x1:x2]
+                                yellow=(pixels[:,:,0]>180)&(pixels[:,:,1]>90)&(pixels[:,:,2]<100)
+                                medusa_pixels[str(dialogue+1)]=int(yellow.sum())
+                                assert yellow.sum()>100*scale*scale,'Medusa cape remained hidden behind the battlement'
                             assert float(current[11])==180,current
                             before=int(current[5]); click(88,610); click(500,634)
                             assert int(row()[5])==before,"Cinematic accepted training input"
                     elif int(current[31])>0 and not attacked:
-                        attacked=True; shot("giant-strike")
+                        attacked=True
+                        # The old check captured the left castle after a hit
+                        # elsewhere. Center the actual Giant for visual QA.
+                        user.SendMessageW(hwnd,0x8000+26,0,0)
+                        actors=list(csv.DictReader(capture.with_suffix('.units.tsv').open(encoding='utf-8'),delimiter='\t'))
+                        giant=next(u for u in actors if u['symbol']=='7025' and u['enemy']=='1')
+                        target=float(giant['x'])-425
+                        click(305.2+231*float(giant['x'])/6000,600)
+                        wait(lambda r:abs(float(r[2])-target)<50 or int(r[0])>=200,5)
+                        shot("giant-strike")
                     time.sleep(.12)
                 assert current[0]=="28",current
                 assert seen==set(range(7)) and start>0,seen
@@ -101,7 +121,7 @@ def run(width,height):
                 record=save.read_text().splitlines()
                 assert record[1].split()[:2]==["6","6"] and int(record[7].split()[2])==1,record[:8]
                 report=dict(resolution=[width,height],victory=True,cinematicStart=start,victoryTick=int(current[1]),
-                    dialogueStates=len(seen),giantHits=int(current[31]),castleShots=int(current[26]),savedLevel=6,nextMapFrame=341)
+                    dialogueStates=len(seen),medusaVisiblePixels=medusa_pixels,giantHits=int(current[31]),castleShots=int(current[26]),savedLevel=6,nextMapFrame=341)
                 (out/f"{prefix}-checks.json").write_text(json.dumps(report,indent=2)+"\n")
                 user.PostMessageW(hwnd,0x10,0,0); assert process.wait(timeout=8)==0
                 print(report,flush=True)

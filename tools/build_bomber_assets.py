@@ -37,7 +37,9 @@ def build():
         for event in c.index['timelines'][str(owner)]:
             if event['op']=='label':label=event['name']
             if event.get('name')!='mc' or 'id' not in event or label not in names:continue
-            symbol=event['id'];c.render(symbol,scale=1)
+            symbol=event['id']
+            if owner==7526: c.render_detailed(symbol)
+            else: c.render(symbol,scale=1)
             poses.append((owner,label,symbol,*event['matrix'][4:],c.timeline(symbol).getFrameCount(),0))
     c.render(3970,[1],scale=1)
     # Boulder places its child at (-width/2,-height/2) before rotating it.

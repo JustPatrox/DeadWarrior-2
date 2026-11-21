@@ -53,7 +53,8 @@ def build():
             if event["op"]=="label": label=event["name"]
             if event.get("name")!="mc" or label not in labels: continue
             symbol=event["id"]
-            c.render(symbol,scale=1)
+            if owner in (7025,7526): c.render_detailed(symbol)
+            else: c.render(symbol,scale=1)
             poses.append((owner,label,symbol,*event["matrix"][4:],c.timeline(symbol).getFrameCount(),0))
             events.extend((symbol,e["frame"],e["name"]) for e in c.index["timelines"].get(str(symbol),[]) if e["op"]=="label")
     for symbol in (2318,2423,2426,3914,1314,1290): c.render(symbol,[1],scale=1)
@@ -103,7 +104,7 @@ def refresh_enslaved():
         previous=list(csv.reader(file,delimiter="\t"))
     for row in (c.directory/"animations.tsv").read_text().splitlines():
         owner,name,symbol,*rest=row.split()
-        if int(owner)==7526: c.render(int(symbol),scale=1)
+        if int(owner)==7526: c.render_detailed(int(symbol))
     textures={(int(row[0]),int(row[1])):row for row in previous}
     textures.update({(row[0],row[1]):row for row in c.rows})
     table(c.directory/"textures.tsv",textures.values())

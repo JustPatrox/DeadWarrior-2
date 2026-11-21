@@ -3,6 +3,8 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <algorithm>
+#include <cmath>
 
 using namespace sw2;
 int main(int argc,char** argv) {
@@ -43,6 +45,21 @@ int main(int argc,char** argv) {
                 previousDialogue=state.dialogue;
                 const auto voice=scene.takeVoice(); require(!voice.empty(),"Dialogue voice missing"); ++voices;
                 require(!scene.fastForward(),"Fast forward remained active during the cinematic");
+                if(state.dialogue<=2) {
+                    const auto list=scene.drawList();
+                    const auto medusa=std::find_if(list.begin(),list.end(),[](const Draw& d){return d.symbol==8050;});
+                    require(medusa!=list.end(),"Medusa stand pose missing during her dialogue");
+                    // Original CampaignCutScene1: py125, flyingHeight380;
+                    // Unit.updateMotion: scale1.2 * perspective(.5 + .3/2)=.78.
+                    const auto bounds=art.texture(medusa->symbol,medusa->frame).bounds;
+                    const double originalTop=320+125-296.4+(-306.05+bounds.y)*.78;
+                    require(std::abs(medusa->target.y-originalTop)<.001,
+                        "Medusa flight omitted her original unit scale and sank behind the battlement");
+                    const double barLeft=5050-scene.camera()-30*1.3*.78/2;
+                    require(std::any_of(list.begin(),list.end(),[&](const Draw& d){return !d.symbol && d.kind==Draw::Kind::Box &&
+                        d.color==0 && std::abs(d.target.x-barLeft)<.001 && d.target.y+d.target.h<medusa->target.y;}),
+                        "Medusa health bar did not follow her airborne position");
+                }
                 const auto gold=state.gold;
                 click({88,610}); click({500,634}); scene.unitAbility();
                 require(scene.battleStatus().gold==gold,"Training remained active during the cinematic");

@@ -93,6 +93,31 @@ class ArtCompiler:
             self.rows.append((symbol,index,file,rect.Xmin/20+crop[0]/scale,
                               rect.Ymin/20+crop[1]/scale,trimmed.width/scale,trimmed.height/scale))
 
+    def supersample(self, rows, density=3):
+        """Rasterize original vectors again while retaining existing world bounds.
+
+        Larger actors need more texels, not larger simulation colliders or a
+        different animation. Each row keeps its original origin/size verbatim.
+        """
+        for row in rows:
+            symbol, frame, filename = int(row[0]), int(row[1]), row[2]
+            x, y, width, height = map(float, row[3:])
+            rect = self.J(FLASH+"types.RECT")(*(round(v*20) for v in (x,x+width,y,y+height)))
+            surface = self.swf_class.frameToImageGet(self.timeline(symbol),frame-1,0,None,0,rect,
+                self.matrix(),None,None,density,True,1)
+            path = self.directory/filename
+            self.J("javax.imageio.ImageIO").write(surface.getBufferedImage(),"png",self.J("java.io.File")(str(path)))
+            # FFDec includes a terminal raster column/row. Retain exactly the
+            # original logical rectangle, at a denser sampling grid.
+            with Image.open(path) as image:
+                pixels = image.crop((0,0,round(width*density),round(height*density)))
+            pixels.save(path)
+
+    def render_detailed(self, symbol, frames=None, density=3):
+        start = len(self.rows)
+        self.render(symbol,frames,scale=1)
+        self.supersample(self.rows[start:],density)
+
     def build(self):
         OUT.mkdir(parents=True, exist_ok=True)
         # Menu equipment has addFrameScript(0, frame1) with stop(). Freeze only
