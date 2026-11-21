@@ -387,9 +387,12 @@ int main(int argc,char** argv) {
         fs::create_directories(saveDir);
         SDL_Window* window=SDL_CreateWindow("DeadWarrior 2",1280,720,SDL_WINDOW_RESIZABLE|SDL_WINDOW_HIGH_PIXEL_DENSITY);
         if(!window) throw std::runtime_error(SDL_GetError());
+        if(test) SDL_Log("SMOKE native window created");
         const auto windowGuard=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(window,SDL_DestroyWindow);
         SDL_SetWindowMinimumSize(window,640,360);SDL_SetWindowAspectRatio(window,16.f/9,16.f/9);
+        if(test) SDL_Log("SMOKE constructing application");
         Application app(window,root,saveDir);
+        if(test) SDL_Log("SMOKE application ready");
         if(test) {app.selfTest(testDir);result=0;}else result=app.run();
     } catch(const std::exception& error) {
         SDL_Log("FATAL: %s",error.what());
