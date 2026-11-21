@@ -173,12 +173,19 @@ Point CampaignTutorial::workMiner(Unit& u) {
         gold+=u.bag; u.bag=0;
     }
     if (u.bag>=stat(u,"bagSize")) {
+        u.miningSlot=-1; // MinerAi releases its spot during the return trip.
         const double dy=depth_/2-u.position.y;
         u.facing=-direction;
         return {(home-u.position.x)/20,std::abs(dy)<40 ? 0 : dy/20};
     }
     if (!praying && !oreRemaining_[u.resource]) {
         u.resource=-2; u.miningSlot=-1; u.order=Order::Stand; animate(u,"stand");assignFreeMine(u);return {};
+    }
+    if(u.miningSlot<0 && !reserveOre(u,u.resource)) {
+        // MinerAi waits beside a full target, then looks for a free home mine.
+        const Point wait{(ore.x-direction*110-u.position.x)/20,(ore.y-u.position.y)/20};
+        if(!praying) assignFreeMine(u);
+        return wait;
     }
     const double dx=ore.x+direction*(praying ? -50 : (2*u.miningSlot-1)*50)-u.position.x;
     const double dy=ore.y+(praying ? (rules_.at("maxWorshipers")-u.miningSlot)*20-50 : 0)-u.position.y;
@@ -352,6 +359,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
     if(u.order==Order::Move && !u.garrisoned && !isWorker(u.symbol) &&
        std::hypot(u.goal.x-u.position.x,u.goal.y-u.position.y)<8 &&
        std::hypot(u.velocity.x,u.velocity.y)<.3) {u.order=Order::Stand;u.engageOnMove=true;}
+    if(u.idleFacing && !casting && !attacking && u.order==Order::Stand && std::hypot(u.velocity.x,u.velocity.y)<.3) u.facing=u.idleFacing;
     const int end=animations_.at({u.symbol,u.pose}).length;
     u.frame=u.frame>=end ? 2 : u.frame+1;
     if (mission_ && u.symbol==sword && attacking && u.rageCounter<rules_.at("rage.effect"))
@@ -360,13 +368,29 @@ void CampaignTutorial::updateUnit(Unit& u) {
 void CampaignTutorial::setFormation(Point p) {
     std::vector<Unit*> selected;
     for (auto& u:units_) if (!u.enemy && u.selected && u.hp>0) {
-        u.garrisoned=false; u.engageOnMove=false;
+        u.garrisoned=false; u.engageOnMove=false;u.idleFacing=0;
         if (isWorker(u.symbol)) {u.resource=-2; u.miningSlot=-1;}
         selected.push_back(&u);
     }
     moveFormation(selected,p);
 }
-void CampaignTutorial::moveFormation(const std::vector<Unit*>& selected,Point p,bool keepCombat) {
+int CampaignTutorial::formationType(int symbol) {
+    switch(symbol) {
+    case miner:return 1;case wizard:return 2;case healer:return 3;case archer:return 4;
+    case ninja:return 6;case sword:return 7;case spearton:return 8;case enslavedGiant:return 9;
+    case dead:return 10;case chaosMiner:return 13;case bomber:return 14;case crawler:return 16;
+    case knight:return 17;case medusa:return 18;case giant:return 19;
+    default:return 0;
+    }
+}
+void CampaignTutorial::moveFormation(const std::vector<Unit*>& group,Point p,bool keepCombat) {
+    p={double(int(p.x)),double(int(p.y))}; // UnitMove.arg0/arg1 are int.
+    auto selected=group;
+    // UnitMove.formationOrder: descending AS3 unit type, ascending spawn ID.
+    std::sort(selected.begin(),selected.end(),[](const Unit* a,const Unit* b){
+        const int first=formationType(a->symbol),second=formationType(b->symbol);
+        return first!=second ? first>second : a<b;
+    });
     const int count=int(selected.size());
     for (int i=0;i<count;++i) {
         auto& u=*selected[i];
@@ -378,8 +402,9 @@ void CampaignTutorial::moveFormation(const std::vector<Unit*>& selected,Point p,
         const int dir=u.enemy ? -1 : 1;
         const double x=p.x-dir*(row*8+col*50);
         const bool castle=x<legacyWidth || x>length_-legacyWidth || u.position.x<legacyWidth || u.position.x>length_-legacyWidth;
-        const double available=castle ? depth_/3 : depth_,top=(depth_-available)/2;
-        u.goal={x,count==1 ? std::clamp(y,top,top+available) : top+(row+.5)*available/rows};
+        const double available=castle ? double(int(depth_)/3) : depth_,top=(depth_-available)/2;
+        // UnitCommand stores these fields as int, including fractional rows.
+        u.goal={double(int(x)),double(int(count==1 ? std::clamp(y,top,top+available) : top+(row+.5)*available/rows))};
         // UnitAi.setCommand preserves an existing attack when replacing an
         // ATTACK_MOVE with another ATTACK_MOVE. Keep the new formation goal.
         if (keepCombat && (u.spell || (u.engageOnMove && u.order==Order::Attack &&
@@ -447,7 +472,7 @@ void CampaignTutorial::press(Point p) {
         aimedAttackMove_=false; aimedSpell_=0;
         const bool hold=actionHit(9,p);
         for (auto& u:units_) if (u.selected && !u.enemy && u.hp>0) {
-            u.order=Order::Stand; u.engageOnMove=true; u.hold=hold; u.velocity={}; u.goal=u.position;
+            u.order=Order::Stand; u.engageOnMove=true; u.hold=hold;u.idleFacing=0; u.velocity={}; u.goal=u.position;
         }
         sound(hold ? "CommandHoldSound" : "CommandStopSound",{},false);
         return;
@@ -521,14 +546,14 @@ void CampaignTutorial::command(Point p) {
     const auto target=fromMap ? CommandTarget{} : pointerTarget(p);
     clickMarkers_.push_back({{worldX,p.y-battlefieldY_},1});
     if (target.kind==CommandTarget::Mine || target.kind==CommandTarget::Pray) {
-        for (auto& u:units_) if (!u.enemy && u.selected && isWorker(u.symbol) && u.hp>0) reserveOre(u,target.id);
+        for (auto& u:units_) if (!u.enemy && u.selected && isWorker(u.symbol) && u.hp>0) targetOre(u,target.id);
         sound(target.kind==CommandTarget::Mine ? "ClickGold" : "ClickMana",{},false);
         return;
     }
     sound("CommandMove"+std::to_string(1+soundSequence_++%6),{},false);
     if (target.kind==CommandTarget::Enemy) {
         for (auto& u:units_) if (u.selected && u.hp>0 && !u.enemy) {
-            u.garrisoned=false; u.engageOnMove=false; u.target=target.id; u.order=Order::Attack;
+            u.garrisoned=false; u.engageOnMove=false;u.idleFacing=0; u.target=target.id; u.order=Order::Attack;
         }
         return;
     }

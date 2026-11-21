@@ -82,7 +82,13 @@ CampaignTutorial::BattleStatus CampaignTutorial::battleStatus() const {
 }
 std::vector<CampaignTutorial::UnitStatus> CampaignTutorial::unitStatus() const {
     std::vector<UnitStatus> out;
-    for(const auto& u:units_) out.push_back({u.symbol,u.position,u.enemy,u.hp,u.target,u.pose,u.frame,u.cloakTicks,u.garrisoned});
+    for(const auto& u:units_) out.push_back({u.symbol,u.position,u.enemy,u.hp,u.target,u.pose,u.frame,u.cloakTicks,u.garrisoned,
+        u.selected,u.facing,u.resource,u.miningSlot,u.bag,int(u.order),u.goal});
+    return out;
+}
+std::vector<CampaignTutorial::OreStatus> CampaignTutorial::oreStatus() const {
+    std::vector<OreStatus> out;
+    for(size_t i=0;i<gold_.size();++i)out.push_back({gold_[i],oreRemaining_[i],int(rules_.at("goldAtStartOfMap"))});
     return out;
 }
 CampaignTutorial::Unit& CampaignTutorial::combatTarget(int id) {
@@ -225,9 +231,18 @@ bool CampaignTutorial::reserveOre(Unit& u,int resource) {
     }
     return false;
 }
+void CampaignTutorial::targetOre(Unit& u,int resource) {
+    // UnitAi.checkNextMove changes targetOre even when its spots are full.
+    // Reserving a slot and accepting the new command are separate operations.
+    if(u.resource!=resource) u.miningSlot=-1;
+    u.resource=resource;u.garrisoned=false;u.engageOnMove=false;u.target=-1;
+    u.order=Order::Gather;u.idleFacing=0;
+    if(u.pose=="pray" || u.pose=="bendDownToPray" || u.pose.starts_with("attack_")) animate(u,"run");
+    if(!reserveOre(u,resource) && resource>=0) assignFreeMine(u);
+}
 void CampaignTutorial::assignFreeMine(Unit& u) {
     // Map.createMiningBlock sorts deposits on x. MinerAi visits the home side first.
-    for (size_t i=0;i<mineOrder_.size();++i) {
+    for (size_t i=0;i<mineOrder_.size()/2;++i) {
         const int index=mineOrder_[u.enemy ? mineOrder_.size()-1-i : i];
         if (reserveOre(u,index)) return;
     }
@@ -236,9 +251,10 @@ void CampaignTutorial::orderArmy(bool enemy,ArmyOrder order,double destination) 
     const double base=enemy ? length_-home : home,dir=enemy ? -1. : 1.;
     orders_[enemy]=order;
     if (!enemy) sound(order==ArmyOrder::Garrison ? "GarrisonEnter" : order==ArmyOrder::Defend ? "GarrisonExit" : "CommandMove1",{},false);
-    std::vector<Unit*> formation;
+    std::vector<Unit*> formation,retreating;
     for (auto& u:units_) {
         if (u.enemy!=enemy || u.hp<=0) continue;
+        u.idleFacing=!enemy && order==ArmyOrder::Defend && !isWorker(u.symbol) ? 1 : 0;
         u.garrisoned=order==ArmyOrder::Garrison;
         if (!u.garrisoned && isWorker(u.symbol)) {
             if (u.resource!=-2) { u.order=Order::Gather; continue; }
@@ -248,11 +264,12 @@ void CampaignTutorial::orderArmy(bool enemy,ArmyOrder order,double destination) 
             }
         }
         u.engageOnMove=!u.garrisoned && (order==ArmyOrder::Attack || dir*(u.position.x-destination)<=0);
-        formation.push_back(&u);
+        // Team.defend executes MOVE and ATTACK_MOVE as separate UnitMoves.
+        // Each group has its own row/column count and original type/ID sort.
+        if(!enemy && order==ArmyOrder::Defend && u.position.x>destination) retreating.push_back(&u);
+        else formation.push_back(&u);
     }
-    std::stable_sort(formation.begin(),formation.end(),[](auto* a,auto* b){
-        return !isWorker(a->symbol) && isWorker(b->symbol);
-    });
+    moveFormation(retreating,{destination,depth_/2});
     moveFormation(formation,{destination,depth_/2},order!=ArmyOrder::Garrison);
 }
 

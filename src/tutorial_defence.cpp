@@ -25,21 +25,9 @@ bool CampaignTutorial::hitControl(const char* name,Point p) const {
     return std::any_of(mask.begin(),mask.end(),[p](auto& row){return row.contains(p);});
 }
 void CampaignTutorial::teamOrder(bool garrison) {
-    sound(garrison ? "GarrisonEnter" : "GarrisonExit",{},false);
-    std::vector<Unit*> formation;
-    for (auto& u:units_) {
-        if (u.enemy || u.hp<=0) continue;
-        u.selected=false; u.garrisoned=garrison;
-        if (!garrison && u.symbol==worker && u.resource!=-2) { u.order=Order::Gather; continue; }
-        formation.push_back(&u);
-    }
-    // UnitMove.formationOrder sorts descending by unit type, then ascending by spawn ID.
-    std::stable_sort(formation.begin(),formation.end(),[](auto a,auto b){
-        return a->symbol!=worker && b->symbol==worker;
-    });
-    moveFormation(formation,{garrison ? home-home/3 : home+900,depth_/2});
+    orderArmy(false,garrison ? ArmyOrder::Garrison : ArmyOrder::Defend,garrison ? home-home/3 : home+900);
+    for(auto& u:units_) if(!u.enemy && u.hp>0) u.selected=false;
     defending_=!garrison;
-    orders_[0]=garrison ? ArmyOrder::Garrison : ArmyOrder::Defend;
 }
 bool CampaignTutorial::defencePress(Point p) {
     if (step_>=Step::Objective && step_<Step::Victory) {

@@ -59,8 +59,14 @@ public:
         bool crawlerTech{};
     };
     BattleStatus battleStatus() const;
-    struct UnitStatus {int symbol{};Point position;bool enemy{};double health{};int target{};std::string pose;int frame{},cloaked{};bool garrisoned{};};
+    struct UnitStatus {
+        int symbol{};Point position;bool enemy{};double health{};int target{};
+        std::string pose;int frame{},cloaked{};bool garrisoned{},selected{};
+        int facing{},resource{-2},miningSlot{-1},bag{},order{};Point goal;
+    };
     std::vector<UnitStatus> unitStatus() const;
+    struct OreStatus {Point position;int remaining{},total{};};
+    std::vector<OreStatus> oreStatus() const;
     bool showingResults() const;
     bool ended() const {return step_>=Step::Victory;}
     bool won() const {return step_==Step::Victory;}
@@ -81,6 +87,7 @@ private:
         bool enemy{}, selected{}, hit{},garrisoned{},engageOnMove{},deadCounted{},hold{};
         bool canFight{true};
         int stunned{},targetsHit{},tint{-1};
+        int idleFacing{};
         double altitude{};
         Order order{Order::Stand};
         int target{-1};
@@ -249,6 +256,7 @@ private:
     void updateSelection(Point);
     void setFormation(Point world);
     void moveFormation(const std::vector<Unit*>& group,Point world,bool keepCombat=false);
+    static int formationType(int symbol);
     bool hitControl(const char* name,Point p) const;
     bool defencePress(Point);
     void teamOrder(bool garrison);
@@ -256,6 +264,7 @@ private:
     void orderArmy(bool enemy,ArmyOrder,double destination);
     Unit& combatTarget(int id);
     bool reserveOre(Unit&,int ore);
+    void targetOre(Unit&,int ore);
     void assignFreeMine(Unit&);
     bool productionPress(Point);
     void drawProduction(std::vector<Draw>&) const;

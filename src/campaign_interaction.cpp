@@ -89,9 +89,11 @@ CampaignTutorial::CommandTarget CampaignTutorial::pointerTarget(Point point) con
         for (int i=int(gold_.size())-1;i>=0;--i) {
             if (oreRemaining_[i]<=0) continue;
             const auto ore=gold_[i];
-            const double size=.4*(rules_.at("backScale")+ore.y/depth_*(rules_.at("frontScale")-rules_.at("backScale")));
+            const double size=.4*(rules_.at("backScale")+ore.y/depth_*(rules_.at("frontScale")-rules_.at("backScale")))*oreRemaining_[i]/rules_.at("goldAtStartOfMap");
             const auto b=art_.texture(1078).bounds;
-            if (Rect{ore.x+b.x*size,ore.y-3+b.y*size,b.w*size,b.h*size+6}.contains(plane))
+            const double width=b.w*size;
+            // Gold.hitTest uses the remaining ore's current width.
+            if (Rect{ore.x-width/2,ore.y-width,width,width}.contains(plane))
                 return {CommandTarget::Mine,i};
         }
     }
