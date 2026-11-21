@@ -118,6 +118,7 @@ jobs:
             out/checks/*
             out/test-save/lastest.log
             out/openbox.log
+            out/desktop-readiness.log
             out/smoke-output.log
             out/smoke-stacks.log
           if-no-files-found: warn

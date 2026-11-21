@@ -1,5 +1,6 @@
 """Run real X11 checks with a window manager and capture startup deadlocks."""
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -45,24 +46,51 @@ def main():
             print('SMOKE X11 window manager ready', flush=True)
             # The EWMH property is published during startup. Also require a
             # real managed client to become viewable before launching SDL.
-            probe = subprocess.Popen(['xmessage', '-name', 'DW2DesktopProbe', '-title', 'DW2DesktopProbe', '-timeout', '20', 'Desktop readiness'],
-                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-            try:
-                for _ in range(100):
-                    if manager.poll() is not None or probe.poll() is not None:
-                        capture_stacks(out, manager, probe)
-                        raise RuntimeError('Test desktop or readiness client exited before mapping')
-                    state = subprocess.run(['xwininfo', '-name', 'DW2DesktopProbe'], capture_output=True, text=True, timeout=1)
-                    if state.returncode == 0 and 'Map State: IsViewable' in state.stdout:
-                        break
-                    time.sleep(.1)
-                else:
-                    capture_stacks(out, manager, probe)
-                    raise RuntimeError('Test desktop could not map its readiness client: ' + state.stdout + state.stderr)
-            finally:
-                if probe.poll() is None:
-                    probe.kill()
-                probe.wait(timeout=5)
+            # The first MapRequest can arrive while the WM still initializes,
+            # despite its EWMH property already being present. Do not wait on a
+            # stranded client indefinitely: issue a fresh request with a new
+            # client. Require both visibility and actual WM ownership each time.
+            mapped = False
+            with (out/'desktop-readiness.log').open('w') as readiness:
+                for attempt in range(1,6):
+                    name = f'DW2DesktopProbe-{attempt}'
+                    probe = subprocess.Popen(['xmessage', '-name', name, '-title', name, '-timeout', '20', 'Desktop readiness'],
+                                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                    state_text = clients_text = ''
+                    try:
+                        for _ in range(30):
+                            if manager.poll() is not None:
+                                raise RuntimeError('Test window manager exited during readiness check')
+                            if probe.poll() is not None:
+                                break
+                            try:
+                                state = subprocess.run(['xwininfo', '-name', name], capture_output=True, text=True, timeout=1)
+                                state_text = state.stdout + state.stderr
+                                clients = subprocess.run(['xprop', '-root', '_NET_CLIENT_LIST'], capture_output=True, text=True, timeout=1)
+                                clients_text = clients.stdout + clients.stderr
+                                match = re.search(r'Window id:\s*(0x[\da-fA-F]+)',state_text)
+                                managed = {int(value,16) for value in re.findall(r'0x[\da-fA-F]+',clients_text)}
+                                mapped = bool(state.returncode == 0 and 'Map State: IsViewable' in state_text and
+                                              match and int(match.group(1),16) in managed)
+                                if mapped:
+                                    print(f'SMOKE X11 managed readiness client verified attempt={attempt}',flush=True)
+                                    break
+                            except subprocess.TimeoutExpired as error:
+                                state_text = str(error)
+                            time.sleep(.1)
+                        readiness.write(f'attempt={attempt} mapped={mapped}\n{state_text}\n{clients_text}\n')
+                        readiness.flush()
+                        if mapped:
+                            break
+                        print(f'SMOKE X11 readiness attempt={attempt} was not managed/viewable; recreating client',flush=True)
+                        if attempt == 5:
+                            capture_stacks(out, manager, probe)
+                    finally:
+                        if probe.poll() is None:
+                            probe.kill()
+                        probe.wait(timeout=5)
+                if not mapped:
+                    raise RuntimeError('Test desktop could not manage/map a readiness client after five fresh requests: '+state_text+clients_text)
             print('SMOKE X11 managed client verified', flush=True)
             with (out / 'smoke-output.log').open('w') as output:
                 game = subprocess.Popen([sys.argv[1], '--smoke-test', 'out/checks', '--save-dir', 'out/test-save'],
