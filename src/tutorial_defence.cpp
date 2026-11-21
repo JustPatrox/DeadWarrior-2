@@ -11,7 +11,7 @@ constexpr double radians=std::numbers::pi/180;
 }
 CampaignTutorial::DefenceStatus CampaignTutorial::defenceStatus() const {
     const auto inside=std::count_if(units_.begin(),units_.end(),[](auto& u){return u.hp>0 && !u.enemy && u.garrisoned;});
-    return {goldBalance_,mana_,int(inside),researchTicks_,shots_,impacts_,rangeSelected_,castleArcher_};
+    return {goldBalance_,mana_,int(inside),researchTicks_,shots_,impacts_,rangeSelected_,castleArcher_,castleArcherLevel(),castleResearchLevel_};
 }
 double CampaignTutorial::frontLine() const {
     double front=0;
@@ -48,28 +48,33 @@ bool CampaignTutorial::defencePress(Point p) {
         return true;
     }
     if ((step_==Step::Upgrade || mission_) && rangeSelected_ && Rect{643,590,64,32}.contains(p)) {
-        const auto cost=int(rules_.at("castleArchers1.cost")),manaCost=int(rules_.at("castleArchers1.mana"));
-        if (!researchStarted_ && goldBalance_>=cost && mana_>=manaCost) {
+        const int next=castleArcherLevel()+1;
+        if(next>castleArcherLimit() || castleResearchLevel_ || researchTicks_>=0)return true;
+        const auto cost=int(castleTech(next,"cost")),manaCost=int(castleTech(next,"mana"));
+        if (goldBalance_>=cost && mana_>=manaCost) {
             goldBalance_-=cost; mana_-=manaCost;
             researchStarted_=true;
-            researchTicks_=int(rules_.at("castleArchers1.time"));
+            castleResearchLevel_=next;researchTicks_=int(castleTech(next,"time"));
             sound("UnitMake",{},false);
         }
         return true;
     }
     return false;
 }
+double CampaignTutorial::castleTech(int level,const char* field) const {
+    return rules_.at("castleArchers"+std::to_string(level)+"."+field);
+}
+void CampaignTutorial::updateCastleResearch() {
+    if(researchTicks_>=0)--researchTicks_;
+    else if(castleResearchLevel_) {
+        castleArcherCount_=castleResearchLevel_;castleResearchLevel_=0;castleArcher_=true;
+    } else if(researchStarted_ && !castleArcher_) {castleArcher_=true;castleArcherCount_=1;}
+}
 void CampaignTutorial::updateDefence() {
     if (step_==Step::Garrison || step_==Step::Retreat) {
         for (auto& u:units_) u.selected=false;
     }
     if (step_==Step::Range) goldBalance_=400;
-    if (researchTicks_>=0) {
-        --researchTicks_;
-    } else if (researchStarted_ && !castleArcher_) {
-        // Tech.update marks research complete the tick after the countdown becomes negative.
-        castleArcher_=true;
-    }
     if (step_==Step::Defend || step_==Step::Fight) {
         auto& foe=units_.at(invader_);
         if (step_==Step::Defend) foe.hp=std::max(50.,foe.hp);
@@ -136,45 +141,45 @@ void CampaignTutorial::advanceDefence() {
 }
 
 void CampaignTutorial::updateCastleArcher(bool enemy) {
-    // The first CastleArchers.addUnit archer is at the back of the battlefield (py = 0).
-    const double size=rules_.at("archer.scale")*1.1*rules_.at("backScale");
     const double direction=enemy ? -1. : 1.;
-    const double x=enemy ? length_-home-180 : home+180,z=-390*size;
-    auto& bowAngle=enemy ? enemyBowAngle_ : bowAngle_;
-    auto& bowFrame=enemy ? enemyBowFrame_ : bowFrame_;
-    auto& archerFrame=enemy ? enemyArcherFrame_ : archerFrame_;
-    const double vx=rules_.at("archer.arrowVelocity"),gravity=rules_.at("gravity");
-    int closest=-1;
-    double best=rules_.at("archer.castleRange")*rules_.at("archer.castleRange")+depth_*depth_;
-    for (int i=0;i<int(units_.size());++i) {
-        const auto& u=units_[i];
-        if (u.hp<=0 || u.enemy==enemy || u.cloakTicks || direction*(u.position.x-x)<=0) continue;
-        const double dx=direction*(u.position.x-x),dist=dx*dx+u.position.y*u.position.y;
-        if (dist<best && dx<=rules_.at("archer.castleRange")) { best=dist; closest=i; }
+    const int count=enemy ? 1 : castleArcherLevel();
+    for(int index=0;index<count;++index) {
+        auto& state=enemy ? enemyCastleState_ : castleArchers_[index];
+        const double py=depth_/2*index/rules_.at("castleArchers.num");
+        const double size=rules_.at("archer.scale")*1.1*(rules_.at("backScale")+py/depth_*(rules_.at("frontScale")-rules_.at("backScale")));
+        const double x=(enemy ? length_-home : home)+direction*(180-index*8),z=-390*size;
+        const double vx=rules_.at("archer.arrowVelocity"),gravity=rules_.at("gravity");
+        int closest=-1;
+        double best=rules_.at("archer.castleRange")*rules_.at("archer.castleRange")+depth_*depth_;
+        for(int i=0;i<int(units_.size());++i) {
+            const auto& u=units_[i];
+            if(u.hp<=0 || u.enemy==enemy || u.cloakTicks || direction*(u.position.x-x)<=0)continue;
+            const double dx=direction*(u.position.x-x),dy=u.position.y-py,dist=dx*dx+dy*dy;
+            if(dist<best && dx<=rules_.at("archer.castleRange")) {best=dist;closest=i;}
+        }
+        double theta=-1.2;
+        if(closest>=0) {
+            const double distance=direction*(units_[closest].position.x-x);
+            const double discriminant=std::pow(vx,4)-gravity*(gravity*distance*distance+2*z*vx*vx);
+            theta=discriminant>0 ? std::atan2(vx*vx-std::sqrt(discriminant),gravity*distance) : -1.35;
+        }
+        const double residual=std::remainder(-theta/radians-state.angle,360.);
+        state.angle+=residual*(std::abs(residual)<10 ? .8 : .1);
+        if(closest>=0 && theta!=-1.35 && state.bow==1 && std::abs(std::remainder(-theta/radians-state.angle,360.))<.5) {
+            const double vz=vx*std::sin(theta);
+            const double time=(vz+std::sqrt(std::max(0.,vz*vz-2*gravity*z)))/gravity;
+            Flight shot;shot.enemy=enemy;shot.depth=py;
+            shot.x=x+direction*(rules_.at("archer.bodyX")+rules_.at("archer.bowX"))*size;
+            shot.z=z+(rules_.at("archer.bodyY")+rules_.at("archer.bowY"))*size;
+            shot.dx=direction*vx*std::cos(state.angle*radians);shot.dz=vx*std::sin(state.angle*radians);
+            shot.dy=(units_[closest].position.y-py)/(std::abs(time)<.001 ? 5 : time);
+            advanceArrow(shot);advanceArrow(shot);
+            flights_.push_back(shot);++(enemy ? enemyCastleShots_ : shots_);++state.bow;
+            sound("launchArrow"+std::to_string(1+soundSequence_++%5),{x,py});
+        }
+        if(state.bow!=1 && ++state.bow>=int(rules_.at("archer.bowFrames")))state.bow=1;
+        if(++state.body>int(rules_.at("archer.bodyFrames")))state.body=2;
     }
-    double theta=-1.2;
-    if (closest>=0) {
-        const double distance=direction*(units_[closest].position.x-x);
-        const double discriminant=std::pow(vx,4)-gravity*(gravity*distance*distance+2*z*vx*vx);
-        theta=discriminant>0 ? std::atan2(vx*vx-std::sqrt(discriminant),gravity*distance) : -1.35;
-    }
-    const double residual=std::remainder(-theta/radians-bowAngle,360.);
-    bowAngle+=residual*(std::abs(residual)<10 ? .8 : .1);
-    if (closest>=0 && theta!=-1.35 && bowFrame==1 && std::abs(std::remainder(-theta/radians-bowAngle,360.))<.5) {
-        const double vz=vx*std::sin(theta);
-        const double time=(vz+std::sqrt(std::max(0.,vz*vz-2*gravity*z)))/gravity;
-        Flight shot;
-        shot.enemy=enemy;
-        shot.x=x+direction*(rules_.at("archer.bodyX")+rules_.at("archer.bowX"))*size;
-        shot.z=z+(rules_.at("archer.bodyY")+rules_.at("archer.bowY"))*size;
-        shot.dx=direction*vx*std::cos(bowAngle*radians); shot.dz=vx*std::sin(bowAngle*radians);
-        shot.dy=units_[closest].position.y/(std::abs(time)<.001 ? 5 : time);
-        advanceArrow(shot); advanceArrow(shot); // ProjectileManager.initArrow
-        flights_.push_back(shot); ++(enemy ? enemyCastleShots_ : shots_); ++bowFrame;
-        sound("launchArrow"+std::to_string(1+soundSequence_++%4),{x,0});
-    }
-    if (bowFrame!=1 && ++bowFrame>=int(rules_.at("archer.bowFrames"))) bowFrame=1;
-    if (++archerFrame>int(rules_.at("archer.bodyFrames"))) archerFrame=2;
 }
 void CampaignTutorial::advanceArrow(Flight& a) {
     if (a.struck || a.hidden) { ++a.age; return; }
@@ -254,21 +259,20 @@ Draw CampaignTutorial::rotatedSprite(int symbol,int frame,Point origin,double si
     return d;
 }
 void CampaignTutorial::drawCastleArcher(std::vector<std::pair<double,Draw>>& world,bool enemy) const {
-    const double size=rules_.at("archer.scale")*1.1*rules_.at("backScale");
-    if (enemy) {
-        const double x=length_-home-180-camera_;
-        const Point body{x-rules_.at("archer.bodyX")*size,battlefieldY_+(-390+rules_.at("archer.bodyY"))*size};
-        world.emplace_back(0,sprite(4176,enemyArcherFrame_,body,size,true));
-        const Point arms{body.x-rules_.at("archer.bowX")*size,body.y+rules_.at("archer.bowY")*size};
-        auto bow=rotatedSprite(4168,enemyBowFrame_,arms,size,-enemyBowAngle_);
-        bow.mirrored=true; bow.target.x=2*arms.x-bow.target.x-bow.target.w;
-        world.emplace_back(0,std::move(bow));
-        return;
+    const int count=enemy ? 1 : castleArcherLevel();
+    const double direction=enemy ? -1. : 1.;
+    for(int index=0;index<count;++index) {
+        const auto& state=enemy ? enemyCastleState_ : castleArchers_[index];
+        const double py=depth_/2*index/rules_.at("castleArchers.num");
+        const double size=rules_.at("archer.scale")*1.1*(rules_.at("backScale")+py/depth_*(rules_.at("frontScale")-rules_.at("backScale")));
+        const double x=(enemy ? length_-home : home)+direction*(180-index*8)-camera_;
+        const Point body{x+direction*rules_.at("archer.bodyX")*size,battlefieldY_+py+(-390+rules_.at("archer.bodyY"))*size};
+        world.emplace_back(py,sprite(4176,state.body,body,size,enemy));
+        const Point arms{body.x+direction*rules_.at("archer.bowX")*size,body.y+rules_.at("archer.bowY")*size};
+        auto bow=rotatedSprite(4168,state.bow,arms,size,direction*state.angle);
+        if(enemy) {bow.mirrored=true;bow.target.x=2*arms.x-bow.target.x-bow.target.w;}
+        world.emplace_back(py,std::move(bow));
     }
-    Point body{home+180-camera_+rules_.at("archer.bodyX")*size,battlefieldY_+(-390+rules_.at("archer.bodyY"))*size};
-    world.emplace_back(0,sprite(4176,archerFrame_,body,size));
-    Point arms{body.x+rules_.at("archer.bowX")*size,body.y+rules_.at("archer.bowY")*size};
-    world.emplace_back(0,rotatedSprite(4168,bowFrame_,arms,size,bowAngle_));
 }
 void CampaignTutorial::drawArrows(std::vector<std::pair<double,Draw>>& world) const {
     for (const auto& a:flights_) {

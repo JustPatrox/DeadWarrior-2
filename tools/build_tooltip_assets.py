@@ -48,6 +48,8 @@ def build():
     originals=dict(re.findall(r'displayTip\("([^"]+)","([^"]+)",0,0,0,0,true\)',source))
     for key,name in ((-10,'Garrison'),(-11,'Defend'),(-12,'Attack'),(-13,'Garrison Miners'),(-14,'Resume Mining')):
         render(key,name,originals[name],hide=True,delay=24)
+    # Append to preserve every existing original tooltip frame binding.
+    for tier in (2,3):xml(-tier,data.find(f'Order/Tech/castleArchers{tier}'),True)
     table(c.directory/'textures.tsv',c.rows)
     table(c.directory/'tooltips.tsv',rows)
     print('Original toolBoxMc variants:',len(rows),flush=True)

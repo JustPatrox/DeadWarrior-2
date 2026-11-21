@@ -295,6 +295,9 @@ public:
         click({154,668});for(int i=0;i<100;++i) tick();require(menu_.page()==Page::Intro,"Difficulty input failed");
         click({434,639});for(int i=0;i<80;++i) tick();require(bool(battle_),"Skip intro did not open tutorial");
         for(int i=0;i<40;++i) tick();draw(1280,720,out/"tutorial.png");
+        click({650,397});require(battle_->battleStatus().selectedMilitary==1,"Single click selected overlapping units");
+        pointer(1,Point{580,260});pointer(0,Point{720,510});pointer(2,Point{720,510});
+        require(battle_->battleStatus().selectedMilitary==2,"Held rectangle did not select both tutorial soldiers");
         const int before=battle_->ticks();click({506,686});require(pause_.isOpen(),"HUD MENU did not open pause");
         for(int i=0;i<60;++i) tick();require(battle_->ticks()==before,"Paused simulation advanced");draw(1280,720,out/"pause.png");
         if constexpr(optionSettingsKey) {
@@ -348,12 +351,25 @@ public:
         key(SDLK_ESCAPE);key(SDLK_ESCAPE);
         require(!pause_.isOpen(),"Pause did not resume");for(int i=0;i<15;++i) tick();require(battle_->ticks()==before+15,"Resume changed simulation rate");
         for(int level=1;level<CampaignProgress::playableLevelCount;++level) {
-            progress_={};progress_.level=level;progress_.points=level;startBattle();for(int i=0;i<60;++i) tick();
+            progress_={};progress_.level=level;progress_.points=level;
+            if(level==1) {progress_.upgrades.set(6);progress_.upgrades.set(10);}
+            startBattle();for(int i=0;i<60;++i) tick();
             if(level==1) {
                 click({344,683});require(display_.isOpen(),"PC toolbar button did not open settings");key(SDLK_ESCAPE);
                 pointer(0,Point{30,610});for(int i=0;i<4;++i) tick();
                 const auto list=battle_->drawList();require(std::any_of(list.begin(),list.end(),[](const Draw& d){return d.symbol==1119;}),"Original tooltip did not appear");
                 draw(1280,720,out/"original-tooltip.png");
+                click({310,600});for(int i=0;i<100;++i)tick();
+                click({550-battle_->camera(),300});
+                for(int tier=1;tier<=3;++tier) {
+                    const int cost=200+tier*100;
+                    for(int i=0;i<6000&&battle_->battleStatus().gold<cost;++i)tick();
+                    require(!battle_->ended()&&battle_->battleStatus().gold>=cost,"Castle research fixture could not afford its next tier");
+                    click({675,606});require(battle_->defenceStatus().researchLevel==tier,"Unlocked Castle Archer tier did not begin research");
+                    for(int i=0;i<1000&&battle_->defenceStatus().castleArchers<tier;++i)tick();
+                    require(battle_->defenceStatus().castleArchers==tier,"Castle Archer tier did not finish");
+                    draw(1280,720,out/("castle-tier-"+std::to_string(tier)+".png"));
+                }
             }
             if(level==7) {
                 key(SDLK_SPACE);keyRelease(SDLK_SPACE);
@@ -371,7 +387,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true,\"singleClickSelection\":true,\"dragSelection\":true,\"castleArcherTiers\":true}\n";
         log("SELF-TEST passed");
     }
 };

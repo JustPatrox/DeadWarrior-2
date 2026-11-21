@@ -249,6 +249,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
         u.frame=std::min(u.frame+1,animations_.at({u.symbol,u.pose}).length);
         return;
     }
+    finishMove(u);
     Point force{};
     const bool casting=u.canFight && (u.spell || !u.stunned) && (u.symbol==wizard || u.symbol==healer) && updateCaster(u);
     bool attacking=!casting && u.pose.starts_with("attack_");
@@ -362,9 +363,6 @@ void CampaignTutorial::updateUnit(Unit& u) {
     u.position.x+=u.velocity.x; u.position.y+=u.velocity.y;
     if(mission_ && isWorker(u.symbol) && u.resource==-2 && u.engageOnMove &&
        u.order==Order::Move && std::hypot(u.goal.x-u.position.x,u.goal.y-u.position.y)<40) assignFreeMine(u);
-    if(u.order==Order::Move && !u.garrisoned && !isWorker(u.symbol) &&
-       std::hypot(u.goal.x-u.position.x,u.goal.y-u.position.y)<8 &&
-       std::hypot(u.velocity.x,u.velocity.y)<.3) {u.order=Order::Stand;u.engageOnMove=true;}
     if(u.idleFacing && !casting && !attacking && u.order==Order::Stand && std::hypot(u.velocity.x,u.velocity.y)<.3) u.facing=u.idleFacing;
     const int end=animations_.at({u.symbol,u.pose}).length;
     u.frame=u.frame>=end ? 2 : u.frame+1;
@@ -452,6 +450,9 @@ void CampaignTutorial::moveFormation(const std::vector<Unit*>& group,Point p,boo
         const double available=castle ? double(int(depth_)/3) : depth_,top=(depth_-available)/2;
         // UnitCommand stores these fields as int, including fractional rows.
         u.goal={double(int(x)),double(int(count==1 ? std::clamp(y,top,top+available) : top+(row+.5)*available/rows))};
+        // UnitAi.setCommand skips stateFixForCutToWalk for AI teams. Macro
+        // defend/attack orders must not restart an enemy's ongoing strike.
+        if(u.enemy && u.pose.starts_with("attack_"))continue;
         // UnitAi.setCommand preserves an existing attack when replacing an
         // ATTACK_MOVE with another ATTACK_MOVE. Keep the new formation goal.
         if (keepCombat && (u.spell || (u.engageOnMove && u.order==Order::Attack &&
@@ -468,6 +469,7 @@ void CampaignTutorial::point(std::optional<Point> p) {
     if (dragStart_ && p && p->y<575) updateSelection(*p);
 }
 void CampaignTutorial::press(Point p) {
+    dragStart_.reset();selectionDragging_=false;
     point(p);toolbarMouseDown(true);
     cursor_=p;
     if (step_>=Step::Victory) {
@@ -499,12 +501,8 @@ void CampaignTutorial::press(Point p) {
     }
     if (p.y<575 && (mission_ || step_>=Step::Range)) {
         const Point local{p.x+camera_,p.y};
-        const bool troop=std::any_of(units_.begin(),units_.end(),[&](const Unit& u){
-            return !u.enemy && u.hp>0 && std::abs(local.x-u.position.x)<u.width*scale(u)/2 &&
-                p.y<=battlefieldY_+u.position.y && p.y>battlefieldY_+u.position.y-u.height*scale(u);
-        });
-        if(troop) {dragStart_=p;updateSelection(p);return;}
-        if(!troop) for(const auto& part:castleParts_) if(castleHit(part,local)) {
+        if(selectionHit(p)>=0) {beginSelection(p);return;}
+        for(const auto& part:castleParts_) if(castleHit(part,local)) {
             selectedBuilding_=part.symbol;pressedCastle_=part.symbol;rangeSelected_=part.symbol==1865;
             for(auto& u:units_) u.selected=false;
             sound("MouseoverStructure",{},false);return;
@@ -557,7 +555,7 @@ void CampaignTutorial::press(Point p) {
         else if (rangeSelected_ && Rect{643,626,64,70}.contains(p)) unavailableControl_="HUD.CastleArcher additional research";
         return;
     }
-    dragStart_=p; updateSelection(p);
+    beginSelection(p);
 }
 void CampaignTutorial::release(std::optional<Point> p) {
     toolbarMouseDown(false);
@@ -568,16 +566,36 @@ void CampaignTutorial::release(std::optional<Point> p) {
     } else if (showingResults() && p && pressedResult_==resultHit(*p)) resultAction_=pressedResult_;
     pressedCard_=false;
     pressedResult_=ResultAction::None;
-    point(p); dragStart_.reset(); mapDown_=false;
+    point(p); dragStart_.reset();selectionDragging_=false; mapDown_=false;
+}
+int CampaignTutorial::selectionHit(Point p) const {
+    int hit=-1;
+    for(int i=0;i<int(units_.size());++i) {
+        const auto& u=units_[i];
+        if(u.enemy || u.hp<=0)continue;
+        const double size=scale(u),x=u.position.x-camera_;
+        const double y=battlefieldY_+u.position.y-u.altitude*size;
+        if(std::abs(p.x-x)<u.width*size/2 && p.y>y-u.height*size && p.y<=y &&
+           (hit<0 || u.position.y>=units_[hit].position.y))hit=i;
+    }
+    // Units draw in stable depth order; pick the frontmost matching body once.
+    return hit;
+}
+void CampaignTutorial::beginSelection(Point p) {
+    rangeSelected_=false;selectedBuilding_=0;
+    dragStart_=p;selectionDragging_=false;
+    const int hit=selectionHit(p);
+    for(int i=0;i<int(units_.size());++i)units_[i].selected=i==hit;
 }
 void CampaignTutorial::updateSelection(Point point) {
-    rangeSelected_=false;selectedBuilding_=0;
+    // A small pointer tremor is still a click. Once a drag begins, returning
+    // to its origin never turns it back into a multi-body point selection.
+    if(!selectionDragging_ && std::hypot(point.x-dragStart_->x,point.y-dragStart_->y)<5)return;
+    selectionDragging_=true;
     const auto box=between(*dragStart_,point);
     for (auto& u:units_) {
-        if (u.enemy || u.hp<=0) continue;
         const double x=u.position.x-camera_,y=battlefieldY_+u.position.y,h=u.height*scale(u);
-        u.selected=(x>box.x && x<box.x+box.w && box.y<y && y-h/2<box.y+box.h)
-                  || (std::abs(point.x-x)<u.width*scale(u)/2 && point.y>y-h && point.y<y);
+        u.selected=!u.enemy && u.hp>0 && x>box.x && x<box.x+box.w && box.y<y && y-h/2<box.y+box.h;
     }
 }
 void CampaignTutorial::command(Point p) {
@@ -669,8 +687,6 @@ void CampaignTutorial::tick() {
     const bool slow=atBase || (step_>=Step::Enemy && step_<=Step::Range) || step_==Step::Defend;
     camera_+=int((targetCamera_-camera_)*(slow ? .05 : rules_.at("screenScrollGain")));
     camera_=std::clamp(camera_,-Viewport::left,length_-Viewport::right);
-    if ((step_==Step::Move || step_==Step::Scroll || step_==Step::Attack) && !units_[0].selected)
-        units_[0].selected=units_[1].selected=true;
     if (!mission_ && step_>=Step::Enemy) updateDefence();
     simulateActors(true);
     if (fastForward()) {
@@ -704,12 +720,10 @@ void CampaignTutorial::tick() {
         if (units_[2].selected) step_=Step::Pray;
         break;
     case Step::Pray:
-        units_[2].selected=true;
         if (units_[2].order==Order::Gather && units_[2].resource<0) step_=Step::PrayInfo;
         break;
     case Step::PrayInfo: if (mana_>10) step_=Step::Mine; break;
     case Step::Mine:
-        units_[2].selected=true;
         if (units_[2].order==Order::Gather && units_[2].resource>=0) {
             step_=Step::GoldInfo; goldBalance_=150; counter_=0; trainingAvailable_=true;
         }
@@ -872,7 +886,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         out.push_back(std::move(fog));
         if(edge<Viewport::right) out.push_back(Draw::shape(Draw::Kind::Box,{edge,0,Viewport::right-edge,Viewport::height},0,.7));
     }
-    if (dragStart_ && cursor_) {
+    if (selectionDragging_ && dragStart_ && cursor_) {
         const Rect box=between(*dragStart_,*cursor_);
         out.push_back(Draw::shape(Draw::Kind::Box,box,0x00ff00,.2));
         out.push_back(Draw::shape(Draw::Kind::Outline,box,0x00ff00,.75));
@@ -908,12 +922,17 @@ std::vector<Draw> CampaignTutorial::drawList() const {
                                           minimap.w*(1-vision),minimap.h},0,.8));
     auto selected=std::find_if(units_.begin(),units_.end(),[](const Unit& u){return u.selected && u.hp>0;});
     if (rangeSelected_) {
-        out.push_back(sprite(castleArcher_ ? 10130 : 10126,1,{675,606}));
+        const int level=castleArcherLevel();
+        if(level<3) {
+            auto icon=sprite(std::array{10126,10130,10128}[level],1,{675,606});
+            if(level>=castleArcherLimit())icon.alpha=.2;
+            out.push_back(std::move(icon));
+        }
         for (auto [id,y]:std::array<std::pair<int,int>,2>{{{8804,642},{10123,678}}}) {
             auto icon=sprite(id,1,{675.,double(y)}); icon.alpha=.2; out.push_back(icon);
         }
         if (researchTicks_>=0) {
-            const double ratio=researchTicks_/rules_.at("castleArchers1.time");
+            const double ratio=researchTicks_/castleTech(castleResearchLevel_ ? castleResearchLevel_ : 1,"time");
             out.push_back(Draw::shape(Draw::Kind::Box,{643,622-32*ratio,64,32*ratio},0,.6));
         }
     } else if (selected!=units_.end()) {

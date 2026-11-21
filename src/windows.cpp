@@ -699,6 +699,9 @@ class Window {
         case WM_APP+24: return capturePath_.empty() ? 0 : LRESULT(std::lround(Viewport::height*100));
         case WM_APP+25: return capturePath_.empty() ? 0 : int(cursorConfined_);
         case WM_APP+28: return capturePath_.empty() ? -1 : int(menu_.page());
+        case WM_APP+29: return capturePath_.empty() || !tutorial_ ? -1 : tutorial_->defenceStatus().castleArchers;
+        case WM_APP+30: return capturePath_.empty() || !tutorial_ ? -2 : tutorial_->defenceStatus().researchTicks;
+        case WM_APP+31: return capturePath_.empty() || !tutorial_ ? -1 : tutorial_->battleStatus().gold;
         case WM_APP+26: {
             // Explicit diagnostic capture only; normal play still writes lastest.log.
             if(capturePath_.empty() || !tutorial_) return 0;

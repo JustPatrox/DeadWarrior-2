@@ -29,7 +29,7 @@ int CampaignTutorial::tooltipAt() const {
         if(!art_.art.contains({entry.icon,1}) || !sprite(entry.icon,1,entry.at).target.contains(*cursor_)) continue;
         return entry.unit;
     }
-    if(rangeSelected_ && Rect{643,590,64,32}.contains(*cursor_)) return -1;
+    if(rangeSelected_ && castleArcherLevel()<3 && Rect{643,590,64,32}.contains(*cursor_)) return -(castleArcherLevel()+1);
     if(hitControl("garrisonButton",*cursor_)) return -10;
     if(hitControl("defendButton",*cursor_)) return -11;
     if(hitControl("attackButton",*cursor_)) return -12;

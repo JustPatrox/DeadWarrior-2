@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 from build_menu_assets import ArtCompiler, ROOT, WORK
 
-DEFENCE_ICONS=(8804,10123,10126,10130)
+DEFENCE_ICONS=(8804,10123,10126,10130,10128)
 
 
 def outcome_art(c,level,data):
@@ -304,8 +304,10 @@ def tutorial_art(c,level,refresh_ui=False):
         campaign=ElementTree.parse(next((WORK/"extract/binaryData").glob("29_*")))
         for unit in ("Miner","Spearton"):
             f.write(f"composition.{unit}\t{campaign.findtext('Order/UnitComposition/'+unit)}\n")
-        for field in ("cost","mana","time"):
-            f.write(f"castleArchers1.{field}\t{data.findtext('Order/Tech/castleArchers1/'+field)}\n")
+        for tier in range(1,4):
+            for field in ("cost","mana","time"):
+                f.write(f"castleArchers{tier}.{field}\t{data.findtext(f'Order/Tech/castleArchers{tier}/'+field)}\n")
+        f.write(f"castleArchers.num\t{data.findtext('Order/Tech/castleArchers/num')}\n")
         for name in ("body","bow"):
             key="4236" if name=="body" else "4176"
             child=next(e for e in timelines[key] if e.get("name")==("mc" if name=="body" else "bow"))

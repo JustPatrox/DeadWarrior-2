@@ -33,6 +33,7 @@ public:
     struct DefenceStatus {
         int gold{},mana{},garrisoned{},researchTicks{},shots{},impacts{};
         bool rangeSelected{},castleArcher{};
+        int castleArchers{},researchLevel{};
     };
     DefenceStatus defenceStatus() const;
     struct BattleStatus {
@@ -193,6 +194,7 @@ private:
     bool transitioning_{true},mapDown_{};
     double messageX_{-600},camera_{2200},targetCamera_{2200},length_{},depth_{},battlefieldY_{};
     std::optional<Point> cursor_,dragStart_;
+    bool selectionDragging_{};
     std::string nextVoice_;
     std::string unavailableControl_;
     std::map<std::string,std::vector<Rect>> controlMasks_;
@@ -205,11 +207,12 @@ private:
         double poison{},spin{};
     };
     std::vector<Flight> flights_;
-    int invader_{-1},researchTicks_{-1},bowFrame_{1},archerFrame_{1},shots_{},impacts_{};
+    int invader_{-1},researchTicks_{-1},shots_{},impacts_{};
     bool rangeSelected_{},researchStarted_{},castleArcher_{},defending_{};
-    double bowAngle_{};
-    int enemyBowFrame_{1},enemyArcherFrame_{1},enemyCastleShots_{};
-    double enemyBowAngle_{};
+    struct CastleArcherState {double angle{};int bow{1},body{1};};
+    std::array<CastleArcherState,3> castleArchers_{};
+    CastleArcherState enemyCastleState_;
+    int castleArcherCount_{},castleResearchLevel_{},enemyCastleShots_{};
     bool enemyCastleArcher_{};
     int enemyCastleResearchTicks_{-1};
     struct EnemyBuild {int symbol{},building{};std::string name;};
@@ -251,6 +254,11 @@ private:
     void animate(Unit&,const std::string&);
     void updateUnit(Unit&);
     void separateUnits(Unit&);
+    void finishMove(Unit&);
+    int castleArcherLevel() const {return castleArcherCount_ ? castleArcherCount_ : castleArcher_ ? 1 : 0;}
+    int castleArcherLimit() const {return mission_ && upgrades_[10] ? 3 : mission_ && upgrades_[6] ? 2 : 1;}
+    double castleTech(int level,const char* field) const;
+    void updateCastleResearch();
     CommandTarget pointerTarget(Point) const;
     void drawPointer(std::vector<Draw>&) const;
     void sound(std::string name,Point position={},bool spatial=true);
@@ -258,6 +266,8 @@ private:
     Point workMiner(Unit&);
     void updateMessage();
     int requestedMessage() const;
+    int selectionHit(Point) const;
+    void beginSelection(Point);
     void updateSelection(Point);
     void setFormation(Point world);
     void moveFormation(const std::vector<Unit*>& group,Point world,bool keepCombat=false);

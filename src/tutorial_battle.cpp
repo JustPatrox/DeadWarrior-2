@@ -394,6 +394,7 @@ void CampaignTutorial::simulateActors(bool strategy) {
         mana_+=int(rules_.at(suffix.empty() ? "passiveMana" : "passiveManaUpgraded"+suffix));
     }
     if (step_>=Step::Commands) updateBattle(strategy);
+    updateCastleResearch(); // Tech.update advances once per simulation step, including fast forward.
     for (auto& u:units_) updateUnit(u);
     if (enemyCastleResearchTicks_>=0 && --enemyCastleResearchTicks_<0) enemyCastleArcher_=true;
     if (castleArcher_) updateCastleArcher();
@@ -415,6 +416,8 @@ void CampaignTutorial::updateBattle(bool strategy) {
     if (strategy && mission_==7) updateKnightController();
     if (strategy && mission_==8) updateDeadsController();
     for (auto& u:units_) {
+        // UnitAi.baseUpdate checks MoveCommand.isFinished before acquiring a target.
+        finishMove(u);
         if (!u.canFight || (!u.engageOnMove && u.order!=Order::Stand) || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
         const auto& statue=statues_[!u.enemy];
         auto squared=[&](const Unit& target){
@@ -435,6 +438,12 @@ void CampaignTutorial::updateBattle(bool strategy) {
             (closest==-1 || combatTarget(closest).position.x<wall_.position.x)) closest=ownWall;
         if (closest!=-1) { u.order=Order::Attack; u.target=closest; }
         else if (u.order==Order::Attack) {u.order=Order::Move; u.target=-1;}
+    }
+}
+void CampaignTutorial::finishMove(Unit& u) {
+    if(u.hp>0 && u.order==Order::Move && !u.garrisoned && !isWorker(u.symbol) &&
+       std::abs(u.goal.x-u.position.x)<5 && std::abs(u.goal.y-u.position.y)<5) {
+        u.order=Order::Stand;u.engageOnMove=true;
     }
 }
 void CampaignTutorial::skipTutorial() {

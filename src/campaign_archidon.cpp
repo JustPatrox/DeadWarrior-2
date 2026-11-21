@@ -218,8 +218,6 @@ void CampaignTutorial::drawArcher(std::vector<std::pair<double,Draw>>& layers,co
 }
 
 void CampaignTutorial::updateArchidon() {
-    if (researchTicks_>=0) --researchTicks_;
-    else if (researchStarted_) castleArcher_=true;
     for (auto& u:units_) if (!u.enemy && isWorker(u.symbol) && u.hp>0 && !u.garrisoned &&
         u.resource==-2 && std::abs(u.position.x-u.goal.x)<40) assignFreeMine(u);
     std::array<bool,2> atTower{};
