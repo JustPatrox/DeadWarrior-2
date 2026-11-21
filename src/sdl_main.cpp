@@ -317,9 +317,24 @@ public:
             require(restored.mouseLock() && Viewport::aspect==Viewport::Aspect::Dynamic,"Mouse/aspect settings did not restore");
         }
         key(SDLK_RETURN);key(SDLK_UP);key(SDLK_RETURN);require(!display_.mouseLock(),"Mouse lock did not disable");
-        click({425,300});SDL_SyncWindow(window_);
-        require(SDL_GetWindowFlags(window_)&SDL_WINDOW_FULLSCREEN,"Borderless mode did not cover the desktop");draw(1280,720,out/"borderless.png");
-        click({425,243});SDL_SyncWindow(window_);require(!(SDL_GetWindowFlags(window_)&SDL_WINDOW_FULLSCREEN),"Windowed mode did not restore");
+        auto waitWindowMode=[&](bool fullscreen) {
+            const Uint64 deadline=SDL_GetTicks()+10000;
+            int w=0,h=0;SDL_Rect monitor{};
+            do {
+                SDL_PumpEvents();SDL_GetWindowSize(window_,&w,&h);
+                const bool bounds=SDL_GetDisplayBounds(SDL_GetDisplayForWindow(window_),&monitor);
+                const bool flag=bool(SDL_GetWindowFlags(window_)&SDL_WINDOW_FULLSCREEN);
+                if(flag==fullscreen && (!fullscreen || (bounds && std::abs(w-monitor.w)<=2 && std::abs(h-monitor.h)<=2))) {
+                    log("SMOKE display mode="+std::to_string(display_.displayMode())+" client="+std::to_string(w)+"x"+std::to_string(h));return;
+                }
+                SDL_Delay(10);
+            } while(SDL_GetTicks()<deadline);
+            throw std::runtime_error("Window transition timed out mode="+std::to_string(display_.displayMode())+
+                " flags="+std::to_string(SDL_GetWindowFlags(window_))+" client="+std::to_string(w)+"x"+std::to_string(h)+
+                " monitor="+std::to_string(monitor.w)+"x"+std::to_string(monitor.h)+" SDL="+SDL_GetError());
+        };
+        SDL_ClearError();click({425,300});waitWindowMode(true);draw(1280,720,out/"borderless.png");
+        SDL_ClearError();click({425,243});waitWindowMode(false);
         key(SDLK_ESCAPE);key(SDLK_ESCAPE);
         require(!pause_.isOpen(),"Pause did not resume");for(int i=0;i<15;++i) tick();require(battle_->ticks()==before+15,"Resume changed simulation rate");
         for(int level=1;level<CampaignProgress::playableLevelCount;++level) {
@@ -359,7 +374,9 @@ int main(int argc,char** argv) {
         else if(arg=="--root"&&i+1<argc) root=fs::absolute(argv[++i]);
         else if(arg=="--save-dir"&&i+1<argc) saveDir=fs::absolute(argv[++i]);
     }
+    if(test) SDL_Log("SMOKE initializing video/audio");
     if(!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO)) return 1;
+    if(test) SDL_Log("SMOKE creating native window");
     int result=1;
     try {
         if(root.empty()) {

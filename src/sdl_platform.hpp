@@ -84,6 +84,7 @@ class SdlDisplay {
 public:
     SdlDisplay(SDL_Window*,SDL_Renderer*,const std::filesystem::path&);
     bool isOpen() const {return open_;}
+    int displayMode() const {return mode_;}
     void setOpen(bool value) {open_=value;focus_=mode_;pressed_=-1;}
     int frameLimit() const;
     bool showFps() const {return fps_;}

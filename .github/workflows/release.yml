@@ -86,9 +86,11 @@ jobs:
       - name: Install ready-to-play package
         run: cmake --install build/native --config Release --prefix out/package
       - name: Test Linux window, renderer, input, audio, pause and saves
+        timeout-minutes: 5
         if: runner.os == 'Linux'
         env:
           SDL_AUDIO_DRIVER: dummy
+          SDL_VIDEO_DRIVER: x11
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
           # SDL's desktop fullscreen request is handled by the window manager.
@@ -100,15 +102,21 @@ jobs:
           trap 'kill "$wm_pid" 2>/dev/null || true' EXIT
           python - <<'PY'
           import subprocess, time
+          diagnostic = ''
           for attempt in range(50):
-              state = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'], capture_output=True, text=True)
-              if state.returncode == 0 and 'window id #' in state.stdout:
-                  break
+              try:
+                  state = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'], capture_output=True, text=True, timeout=1)
+                  diagnostic = state.stdout + state.stderr
+                  if state.returncode == 0 and 'window id #' in state.stdout:
+                      break
+              except subprocess.TimeoutExpired as error:
+                  diagnostic = str(error)
               time.sleep(.1)
           else:
-              raise RuntimeError('Test window manager did not become ready: ' + state.stdout + state.stderr)
+              raise RuntimeError('Test window manager did not become ready: ' + diagnostic)
+          print('SMOKE X11 window manager ready', flush=True)
           PY
-          'out/package/DeadWarrior 2' --smoke-test out/checks --save-dir out/test-save
+          timeout 180s 'out/package/DeadWarrior 2' --smoke-test out/checks --save-dir out/test-save
           DESKTOP
       - name: Test macOS window, renderer, input, audio, pause and saves
         if: runner.os == 'macOS'
