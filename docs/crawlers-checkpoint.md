@@ -4,7 +4,7 @@ The tenth mission, 4 legged Fury: Crawlers Attack (zero-based level 9), runs in 
 
 ## Original translation
 
-The level uses GrassHills map 4 and the original empty CampaignController, with its XML starting army, recruitment composition, costs, research, and one-point reward. Cat actor 6123 uses the original stand/run/two attacks/death timelines and Default equipment. Adobe readback measured its collider at 93.45 by 150.
+The level uses Forest map 4 and the original empty CampaignController, with its XML starting army, recruitment composition, costs, research, and one-point reward. Cat actor 6123 uses the original stand/run/two attacks/death timelines and Default equipment. Adobe readback measured its collider at 93.45 by 150.
 
 Cat.checkForHit uses damageToArmour against every target. The XML pack value 1.2 is stored in an AS3 int, so it contributes one damage per Cat, capped at five. Normal attacks deal 5. Insane campaign AI grants speed and pack tech: speed changes from 6 to 8, one Cat deals 6, and five or more deal 10. These rules were checked in the native probe and prepared original-player actor tests. No source cost or rule was changed to obtain victory.
 

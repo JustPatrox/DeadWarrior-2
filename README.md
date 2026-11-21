@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>A native port of Stick War 2. Work in progress.</strong><br>
-  C++20 Â· Windows Â· macOS Â· Linux Â· 16:9 presentation
+  C++20 · Windows · macOS · Linux · 16:9 presentation
 </p>
 
 <p align="center">
@@ -15,11 +15,11 @@
 </p>
 
 <p align="center">
-  <a href="#current-status">Status</a> Â·
-  <a href="#download-and-play">Download</a> Â·
-  <a href="#build-from-source">Build</a> Â·
-  <a href="#pc-controls">Controls</a> Â·
-  <a href="https://github.com/JustPatrox/DeadWarrior-2/issues/new/choose">Report a bug</a> Â·
+  <a href="#current-status">Status</a> ·
+  <a href="#download-and-play">Download</a> ·
+  <a href="#build-from-source">Build</a> ·
+  <a href="#pc-controls">Controls</a> ·
+  <a href="https://github.com/JustPatrox/DeadWarrior-2/issues/new/choose">Report a bug</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
@@ -99,7 +99,7 @@ See the [preview.6 fixes and validation](docs/todo-checkpoint.md) for the comple
 
 ## Reporting a problem
 
-Open [a bug report](https://github.com/JustPatrox/DeadWarrior-2/issues/new?template=bug_report.yml) with reproduction steps, resolution, display mode, and version or commit. Attach **`lastest.log`** â€” that spelling is intentional. It is replaced on each launch and normally sits next to the executable. If that directory is not writable, it is stored in `%LOCALAPPDATA%\DeadWarrior 2`.
+Open [a bug report](https://github.com/JustPatrox/DeadWarrior-2/issues/new?template=bug_report.yml) with reproduction steps, resolution, display mode, and version or commit. Attach **`lastest.log`** — that spelling is intentional. It is replaced on each launch and normally sits next to the executable. If that directory is not writable, it is stored in `%LOCALAPPDATA%\DeadWarrior 2`.
 
 Review logs for personal paths before posting them. Do not attach the SWF, extracted resources, or saves containing information you do not want to share.
 
@@ -107,4 +107,4 @@ Review logs for personal paths before posting them. Do not attach the SWF, extra
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), the [Windows guide](docs/windows.md), and the [translation traceability](docs/traceability.md). Simulation code lives in `src/campaign_*` and `src/tutorial_*`; `src/windows_*` handles the platform. Preparation and verification tools live in `tools/`.
 
-<p align="center"><img src="icon.png" alt="DeadWarrior 2 helmet" width="72"><br><sub>DeadWarrior 2 Â· Work in progress</sub></p>
+<p align="center"><img src="icon.png" alt="DeadWarrior 2 helmet" width="72"><br><sub>DeadWarrior 2 · Work in progress</sub></p>

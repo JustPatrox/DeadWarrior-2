@@ -31,13 +31,13 @@ work/venv/Scripts/python.exe tools/check_display.py --compare-software
 work/venv/Scripts/python.exe tools/check_fps_counter.py
 ```
 
-Recorded results on an Intel i5-7400 and RTX 3050 at 1920 Ã— 1080 were 60.07 FPS with Direct2D and 1.88 FPS with GDI+ during the tutorial. One of 853 accelerated frames exceeded 25 ms between presentations. These are measurements from that machine, not performance guarantees.
+Recorded results on an Intel i5-7400 and RTX 3050 at 1920 × 1080 were 60.07 FPS with Direct2D and 1.88 FPS with GDI+ during the tutorial. One of 853 accelerated frames exceeded 25 ms between presentations. These are measurements from that machine, not performance guarantees.
 
 The frame-limit checks recorded simulation rates between 29.82 and 30.20 steps per second with Direct2D, and 30.01 with GDI+ while rendering fell to 1.84 FPS. The FPS-counter test measured 60.03 / 30.01 FPS at 720p and 60.00 / 29.98 at 1080p. Actual presentation rate also depends on the monitor, scene, and V-Sync. Reports live in `work/windows-display/` and `evidence/windows-fps-counter/`.
 
 ### Resolution and saved preferences
 
-Resolution offers **Auto**, **1280 Ã— 720**, **1600 Ã— 900**, **1920 Ã— 1080**, **2560 Ã— 1440**, and **3840 Ã— 2160**. Use the arrows beside the value, or focus the row with Home followed by Up, choose with Left/Right, and press Enter. Auto follows the client size.
+Resolution offers **Auto**, **1280 × 720**, **1600 × 900**, **1920 × 1080**, **2560 × 1440**, and **3840 × 2160**. Use the arrows beside the value, or focus the row with Home followed by Up, choose with Left/Right, and press Enter. Auto follows the client size.
 
 The setting controls the game's render buffer in every display mode. Windowed mode also fits the window to the requested size within the monitor's work area. Fullscreen and borderless presentation retain the desktop mode and scale the chosen render resolution. Letterbox proportions and mouse coordinates remain based on the physical client area. Direct2D and the software fallback both support this behavior.
 
@@ -73,7 +73,7 @@ The Windows release includes prepared native resources. Players do not need a SW
 
 The pipeline uses FFDec 26.5.0, Temurin Java 21 x64, and the Python packages pinned in `requirements-assets.txt`. `tools/prepare_assets.py` accepts explicit SWF, Java, and FFDec paths. Individual generators use `DW2_SWF`, `DW2_JAVA_HOME`, and `DW2_FFDEC_HOME` when set; otherwise they use the original project-local paths.
 
-The landscape extensions in `art/menu/` belong to the flattened menu illustration, symbol 976. The compiler matches their seam colors while preserving the original decoded 850 Ã— 700 center. Titles, buttons, and animated opening fighters come from the supplied SWF.
+The landscape extensions in `art/menu/` belong to the flattened menu illustration, symbol 976. The compiler matches their seam colors while preserving the original decoded 850 × 700 center. Titles, buttons, and animated opening fighters come from the supplied SWF.
 
 ## Menu and window checks
 
