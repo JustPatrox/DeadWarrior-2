@@ -5,11 +5,28 @@ import sys
 import time
 
 
+def capture_stacks(out, *processes):
+    """Preserve the desktop side too when mapping fails before SDL starts."""
+    commands=[['xwininfo', '-root', '-tree'], ['xprop', '-root', '_NET_CLIENT_LIST'],
+              ['ps', '-o', 'pid,ppid,stat,wchan:30,args', '-p', ','.join(str(p.pid) for p in processes)]]
+    commands.extend(['sudo', '-n', 'gdb', '--batch', '-ex', 'set pagination off',
+                     '-ex', 'thread apply all bt', '-p', str(p.pid)] for p in processes)
+    with (out/'smoke-stacks.log').open('w') as stacks:
+        for command in commands:
+            try:
+                subprocess.run(command, stdin=subprocess.DEVNULL, stdout=stacks,
+                               stderr=subprocess.STDOUT, timeout=25)
+            except (subprocess.TimeoutExpired, OSError) as error:
+                stacks.write(str(error)+'\n')
+    print((out/'smoke-stacks.log').read_text(errors='replace'), flush=True)
+
+
 def main():
     out = Path('out')
     out.mkdir(exist_ok=True)
     with (out / 'openbox.log').open('w') as log:
-        manager = subprocess.Popen(['openbox'], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+        # There is no desktop session manager inside this Xvfb test session.
+        manager = subprocess.Popen(['openbox', '--sm-disable', '--sync'], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
         try:
             diagnostic = ''
             for _ in range(50):
@@ -28,15 +45,19 @@ def main():
             print('SMOKE X11 window manager ready', flush=True)
             # The EWMH property is published during startup. Also require a
             # real managed client to become viewable before launching SDL.
-            probe = subprocess.Popen(['xmessage', '-name', 'DW2DesktopProbe', '-timeout', '10', 'Desktop readiness'],
+            probe = subprocess.Popen(['xmessage', '-name', 'DW2DesktopProbe', '-title', 'DW2DesktopProbe', '-timeout', '20', 'Desktop readiness'],
                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             try:
-                for _ in range(30):
+                for _ in range(100):
+                    if manager.poll() is not None or probe.poll() is not None:
+                        capture_stacks(out, manager, probe)
+                        raise RuntimeError('Test desktop or readiness client exited before mapping')
                     state = subprocess.run(['xwininfo', '-name', 'DW2DesktopProbe'], capture_output=True, text=True, timeout=1)
                     if state.returncode == 0 and 'Map State: IsViewable' in state.stdout:
                         break
                     time.sleep(.1)
                 else:
+                    capture_stacks(out, manager, probe)
                     raise RuntimeError('Test desktop could not map its readiness client: ' + state.stdout + state.stderr)
             finally:
                 if probe.poll() is None:
@@ -50,19 +71,7 @@ def main():
                     result = game.wait(timeout=120)
                 except subprocess.TimeoutExpired:
                     print('SMOKE timed out; collecting native thread stacks', flush=True)
-                    with (out / 'smoke-stacks.log').open('w') as stacks:
-                        for command in (["xwininfo", "-root", "-tree"],
-                                        ['ps', '-o', 'pid,ppid,stat,wchan:30,args', '-p', f'{manager.pid},{game.pid}'],
-                                        ['xprop', '-name', 'DeadWarrior 2'],
-                                        ['sudo', '-n', 'gdb', '--batch', '-ex', 'set pagination off',
-                                         '-ex', 'thread apply all bt', '-p', str(game.pid)],
-                                        ['sudo', '-n', 'gdb', '--batch', '-ex', 'set pagination off',
-                                         '-ex', 'thread apply all bt', '-p', str(manager.pid)]):
-                            try:
-                                subprocess.run(command, stdin=subprocess.DEVNULL, stdout=stacks,
-                                               stderr=subprocess.STDOUT, timeout=25)
-                            except (subprocess.TimeoutExpired, OSError) as error:
-                                stacks.write(str(error) + '\n')
+                    capture_stacks(out, game, manager)
                     result = 124
                 finally:
                     if game.poll() is None:
