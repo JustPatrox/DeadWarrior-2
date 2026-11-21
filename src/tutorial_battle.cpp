@@ -102,6 +102,12 @@ int CampaignTutorial::recruitType(bool enemy,int building) const {
     if (building==5) return enemy ? giant : enslavedGiant;
     return enemy && !mission_ ? spearton : sword;
 }
+bool CampaignTutorial::canRecruit(bool enemy,int type) const {
+    const double handicap=enemy ? rules_.at("enemy.handicap") : 1;
+    return (enemy ? enemyGold_ : goldBalance_)>=stat(type,"gold")*handicap &&
+           (enemy ? enemyMana_ : mana_)>=stat(type,"mana")*handicap &&
+           (enemy ? enemyPopulation_ : population_)+int(stat(type,"population"))<=rules_.at("populationLimit");
+}
 bool CampaignTutorial::recruit(bool enemy,int building,bool cancel,int requested) {
     auto& q=production_[enemy][building];
     const int type=requested ? requested : recruitType(enemy,building);
@@ -123,7 +129,7 @@ bool CampaignTutorial::recruit(bool enemy,int building,bool cancel,int requested
     int& gold=enemy ? enemyGold_ : goldBalance_;
     int& mana=enemy ? enemyMana_ : mana_;
     int& population=enemy ? enemyPopulation_ : population_;
-    if (gold<price || mana<magic || population+slots>rules_.at("populationLimit")) return false;
+    if (!canRecruit(enemy,type)) return false;
     gold=int(gold-price); mana=int(mana-magic); population+=slots;
     q.units.push_back({type,price,magic});
     return true;
@@ -168,7 +174,7 @@ void CampaignTutorial::drawProduction(std::vector<Draw>& out) const {
         const auto cross=art_.texture(1874).bounds;
         const Rect cancel=sprite(1874,1,{rect.x+rect.w-cross.w,rect.y}).target;
         const bool hover=cursor_ && rect.contains(*cursor_) && !(count && cancel.contains(*cursor_));
-        if(!toolbarParts_.empty() && !hover) out.push_back(recruitOverlay(slot.type,rect));
+        if(!toolbarParts_.empty() && !canRecruit(false,slot.type)) out.push_back(recruitOverlay(slot.type,rect));
         if (!count) continue;
         if (q.units.front().symbol==slot.type && (toolbarParts_.empty() || !hover))
             out.push_back(timerOverlay({rect.x,rect.y-1,rect.w,rect.h+1},q.elapsed/stat(slot.type,"cooldown")));

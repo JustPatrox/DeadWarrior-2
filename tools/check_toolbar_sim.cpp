@@ -5,7 +5,15 @@
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
+#include <tuple>
 using namespace sw2;
+namespace sw2 {
+struct CampaignProbe {
+    static void resources(CampaignTutorial& game,int gold,int mana,int population) {
+        game.goldBalance_=gold;game.mana_=mana;game.population_=population;
+    }
+};
+}
 int main(int argc,char** argv) {
     try {
         const auto root=std::filesystem::path(argc>1 ? argv[1] : "assets");MenuAssets art(root/"menu");
@@ -74,6 +82,20 @@ int main(int argc,char** argv) {
         for(int i=0;i<5;++i) game.tick();
         require(game.ticks()==simulationBefore+10&&drawn(10009,71006),"Fast-forward changed the toolbar animation rate");
         game.point(Point{30,610});require(drawn(10109,74001),"Original recruitment building highlight missing");
+        for(auto [gold,mana,population,point,building,ready]:
+            std::initializer_list<std::tuple<int,int,int,Point,int,bool>>{
+                {150,0,0,{88,610},1,true},{149,0,0,{88,610},1,false},
+                {500,499,0,{260,610},3,false},{500,500,0,{260,610},3,true},
+                {150,0,80,{88,610},1,false},{150,0,79,{88,610},1,true}}) {
+            CampaignTutorial recruits(art,root,p);
+            CampaignProbe::resources(recruits,gold,mana,population);
+            auto shaded=[&]{const auto list=recruits.drawList();return std::any_of(list.begin(),list.end(),[&](const Draw& d){return d.symbol==9855&&d.target.contains(point);});};
+            require(shaded()!=ready,"Recruitment shading disagrees with available resources/population");
+            recruits.point(point);require(shaded()!=ready,"Hover hid the unavailable recruitment state");
+            const auto before=recruits.battleStatus().queued[building];
+            recruits.press(point);recruits.release(point);
+            require(recruits.battleStatus().queued[building]==before+int(ready),"Recruitment click disagrees with its visual state");
+        }
         std::cout<<"Toolbar, fog, castle hover, miner orders, inherited attack and aspect transforms passed\n";return 0;
     } catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

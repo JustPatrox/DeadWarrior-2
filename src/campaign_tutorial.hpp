@@ -253,6 +253,7 @@ private:
     bool productionPress(Point);
     void drawProduction(std::vector<Draw>&) const;
     void updateProduction();
+    bool canRecruit(bool enemy,int type) const;
     bool recruit(bool enemy,int building,bool cancel=false,int type=0);
     int recruitType(bool enemy,int building) const;
     void simulateActors(bool strategy);
