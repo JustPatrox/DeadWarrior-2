@@ -8,6 +8,7 @@
 #include <mutex>
 
 namespace sw2 {
+Raster loadSdlPng(const std::filesystem::path&);
 #ifdef __APPLE__
 inline constexpr bool optionSettingsKey=true;
 inline constexpr SDL_Keycode settingsKeyCode=SDLK_LALT;
@@ -45,7 +46,7 @@ public:
 
 class SdlAudio {
     struct Clip {std::vector<float> samples;};
-    struct Voice {const Clip* clip{}; size_t cursor{}; float left{1},right{1}; bool loop{},narration{},music{};};
+    struct Voice {const Clip* clip{}; size_t cursor{}; float left{1},right{1}; bool loop{},narration{},music{},cinematic{};};
     std::filesystem::path directory_;
     std::function<void(std::string)> report_;
     std::map<std::string,std::pair<std::filesystem::path,float>> sounds_;
@@ -56,21 +57,26 @@ class SdlAudio {
     bool sound_{true},music_{true},paused_{};
     std::string currentMusic_;
     Clip& load(const std::filesystem::path&);
-    void play(Clip&,float,float,bool,bool,bool);
+    void play(Clip&,float,float,bool,bool,bool,bool cinematic=false);
     static void callback(void*,SDL_AudioStream*,int,int);
 public:
     SdlAudio(const std::filesystem::path&,std::function<void(std::string)>);
     ~SdlAudio();
     void effect(const std::string&,double pan=0,bool spatial=true);
+    void effectFile(const std::filesystem::path&,float gain=1.f);
     void music(const std::string&);
+    void musicFile(const std::filesystem::path&,bool loop=false,float gain=1.f);
     void narration(const std::filesystem::path&);
     void stopNarration();
     void stopMusic();
+    void stopMovieEffects();
     void paused(bool);
     void channels(bool sound,bool music);
     bool soundEnabled() const {return sound_;}
     bool musicEnabled() const {return music_;}
     size_t musicSamplesPlayed();
+    bool musicPlaying();
+    double musicSeconds();
     bool testMix();
 };
 

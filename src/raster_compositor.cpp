@@ -65,6 +65,7 @@ void sample(const Raster& r,double x,double y,std::uint8_t* out) {
 }
 }
 std::shared_ptr<const Raster> RasterCompositor::image(const Draw& group) {
+    if(group.pixels)return group.pixels;
     if(!group.children) throw std::runtime_error("Missing composite draw list");
     std::size_t hash=0;
     auto mix=[&](std::size_t h){hash^=h+0x9e3779b9+(hash<<6)+(hash>>2);};

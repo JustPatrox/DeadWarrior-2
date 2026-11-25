@@ -47,6 +47,7 @@ This project is not affiliated with Max Games or the original game's creators. S
 | Castle hover, tooltips, and PC toolbar button | Original artwork, font, hit areas, and animation states |
 | Original toolbar hover and pressed states | Implemented, including action-slot glow |
 | Original campaign pause menu | MENU, Esc, or P |
+| Animated original trailer intro | Native 30 fps playback, music/effects, Skip and Back controls |
 | Persistent PC settings | Saved in `options.ini` |
 | Remaining campaign and cutscenes | Pending |
 | macOS and Linux | Native preview builds; platform validation in progress |

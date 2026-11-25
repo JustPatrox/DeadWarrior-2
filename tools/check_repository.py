@@ -8,6 +8,16 @@ ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_ASSETS = {"assets/branding/max-games.png"}
 
 
+def resolve_local_link(root, document, target):
+    """Resolve a doc link while rejecting filesystem escapes from the repo."""
+    repository = Path(root).resolve()
+    resolved = (repository / Path(document).parent / target).resolve()
+    try:
+        return resolved.relative_to(repository).as_posix()
+    except ValueError as error:
+        raise ValueError("Local documentation link escapes the repository") from error
+
+
 def main():
     tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode("utf-8").split("\0")
     errors = []
@@ -29,8 +39,12 @@ def main():
             target = (link or image).split("#", 1)[0]
             if not target or re.match(r"[a-z]+:", target, re.I):
                 continue
-            resolved = (Path(name).parent / target).as_posix()
-            if resolved not in paths:
+            try:
+                resolved = resolve_local_link(ROOT, name, target)
+            except ValueError:
+                errors.append(f"Local link escapes repository in {name}: {target}")
+                continue
+            if resolved not in paths or not (ROOT / resolved).is_file():
                 errors.append(f"Broken local link in {name}: {target}")
     if errors:
         print("\n".join(errors), file=sys.stderr)

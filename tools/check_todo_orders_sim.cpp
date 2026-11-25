@@ -21,6 +21,56 @@ struct CampaignProbe {
         }
         std::cout<<"Both Giant types replace Hold with an explicit attack and respond without a workaround\n";
     }
+    static void retarget(CampaignTutorial& g) {
+        // UnitAi.setCommand cuts an allied unit's strike only when the target
+        // changes. EnslavedGiant and active Monk/Magikill spells override it.
+        for(int type:{g.sword,g.spearton,g.ninja,g.archer,g.giant,g.enslavedGiant,g.healer,g.wizard}) {
+            g.units_.clear();g.wall_.hp=0;g.camera_=2000;
+            g.spawn(type,{2400,125});g.spawn(g.spearton,{2500,125},true);g.spawn(g.spearton,{2800,125},true);
+            auto& u=g.units_[0];u.selected=true;u.target=1;u.order=CampaignTutorial::Order::Attack;
+            g.animate(u,"attack_1");u.frame=10;u.hit=false;
+            if(type==g.healer)u.spell=4;
+            if(type==g.wizard)u.spell=1;
+            g.command({500,g.battlefieldY_+100});
+            require(u.target==1&&u.pose=="attack_1"&&u.frame==10,"Repeating the same enemy target restarted an allied strike");
+            g.command({800,g.battlefieldY_+100});
+            require(u.target==2&&u.order==CampaignTutorial::Order::Attack,"Direct retarget failed to replace the commanded enemy");
+            if(type==g.enslavedGiant || u.spell)
+                require(u.pose=="attack_1"&&u.frame==10,"Retarget interrupted an authored throw or active spell");
+            else require(!u.pose.starts_with("attack_")&&u.hit,"Changing an allied target kept the old strike animation active");
+        }
+        std::cout<<"Allied direct retarget cuts ordinary strikes, preserves same-target strikes, Giant throws and active spells\n";
+    }
+    static void stopHold(CampaignTutorial& g) {
+        for(bool hold:{false,true})for(int type:{g.sword,g.spearton,g.ninja,g.archer,g.giant,g.enslavedGiant,g.healer,g.wizard}) {
+            g.units_.clear();g.spawn(type,{2400,125});g.spawn(g.spearton,{2500,125},true);
+            auto& u=g.units_[0];u.selected=true;u.target=1;u.order=CampaignTutorial::Order::Attack;
+            g.animate(u,"attack_1");u.frame=10;u.hit=false;
+            if(type==g.healer)u.spell=4;
+            if(type==g.wizard)u.spell=1;
+            const Point button=hold ? Point{813,678} : Point{744,679.5};
+            g.press(button);g.release(button);
+            require(u.order==CampaignTutorial::Order::Stand&&u.hold==hold,"Stop/Hold failed to replace the pending unit command");
+            if(type==g.enslavedGiant || u.spell)
+                require(u.pose=="attack_1"&&u.frame==10,"Stop/Hold interrupted a protected throw or active spell");
+            else require(!u.pose.starts_with("attack_")&&u.hit,"Stop/Hold left an ordinary allied strike active");
+        }
+        std::cout<<"Stop/Hold cuts ordinary allied strikes while preserving protected throws and spells\n";
+    }
+    static void throwMove(CampaignTutorial& g) {
+        g.units_.clear();g.wall_.hp=0;
+        g.spawn(g.enslavedGiant,{2400,125});g.spawn(g.spearton,{2600,185},true);
+        auto& u=g.units_[0];u.target=1;u.order=CampaignTutorial::Order::Attack;
+        g.updateUnit(u);require(u.pose=="attack_1","Throw/Move fixture failed to start a throw");
+        u.frame=10;const int shots=g.boulderShots_;g.moveFormation({&u},{2700,125});
+        require(u.order==CampaignTutorial::Order::Move&&u.goal.x==2684,"Move did not queue the Giant's original formation destination");
+        require(u.pose=="attack_1"&&u.frame==10&&u.target==1,"Move interrupted the Giant's protected throw or discarded its firing target");
+        for(int tick=0;tick<25;++tick){++g.ticks_;g.updateUnit(u);}
+        require(g.boulderShots_==shots+1&&!g.boulders_.empty()&&g.boulders_.back().dy>0,"Pending Move prevented the throw event or lost its depth aim");
+        for(int tick=0;tick<110;++tick){++g.ticks_;g.updateUnit(u);}
+        require(!u.pose.starts_with("attack_")&&u.position.x>2450,"Giant did not resume its queued movement after throwing");
+        std::cout<<"Enslaved Giant finishes its protected throw and depth aim before following Move\n";
+    }
     static void meric(CampaignTutorial& g) {
         g.units_.clear();g.spawn(g.healer,{2400,125});g.spawn(g.spearton,{2440,125});
         auto& u=g.units_[0];auto& patient=g.units_[1];patient.canFight=false;patient.hp=100;
@@ -67,6 +117,9 @@ int main(int argc,char** argv) {
         for(const char* name:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","knight","deads","interaction"})art.loadTextures(root/name);
         CampaignProgress p;p.level=8;p.points=8;CampaignTutorial g(art,root,p);
         if(test=="all"||test=="giant")CampaignProbe::giant(g);
+        if(test=="all"||test=="retarget")CampaignProbe::retarget(g);
+        if(test=="all"||test=="stop-hold")CampaignProbe::stopHold(g);
+        if(test=="all"||test=="throw-move")CampaignProbe::throwMove(g);
         if(test=="all"||test=="meric")CampaignProbe::meric(g);
         if(test=="all"||test=="tree") {
             // An old or edited save may contain a child whose own parent is absent.

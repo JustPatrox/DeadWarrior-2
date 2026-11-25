@@ -56,7 +56,7 @@ WindowsAudio::Clip& WindowsAudio::load(const std::filesystem::path& path) {
         throw std::runtime_error("Unsupported audio format");
     return clips_.emplace(path,std::move(clip)).first->second;
 }
-void WindowsAudio::play(Clip& clip,float volume,float pan,bool narration) {
+void WindowsAudio::play(Clip& clip,float volume,float pan,bool narration,bool cinematic) {
     if (!ready()) return;
     if (narration) stopNarration();
     auto free=std::find_if(voices_.begin(),voices_.end(),[](const Voice& voice){
@@ -81,10 +81,11 @@ void WindowsAudio::play(Clip& clip,float volume,float pan,bool narration) {
     const float left=1-std::max(0.f,pan),right=1+std::min(0.f,pan);
     const float mono[]{left,right},stereo[]{left,0,0,right};
     free->source->SetOutputMatrix(master_,clip.format.nChannels,2,clip.format.nChannels==1 ? mono : stereo);
-    if (FAILED(free->source->SubmitSourceBuffer(&buffer)) || FAILED(free->source->Start())) {
+    if (FAILED(free->source->SubmitSourceBuffer(&buffer)) ||
+        (!(cinematic && paused_) && FAILED(free->source->Start()))) {
         free->source->DestroyVoice(); free->source=nullptr; return;
     }
-    free->narration=narration; free->serial=++submitted_;
+    free->narration=narration; free->cinematic=cinematic; free->serial=++submitted_;
 }
 void WindowsAudio::effect(const std::string& name,double pan,bool spatial) {
     if (!ready()) return;
@@ -102,6 +103,10 @@ void WindowsAudio::narration(const std::filesystem::path& path) {
     const float gain=sound==sounds_.end() ? 1.f : sound->second.second;
     play(load(path),gain,0,true);
 }
+void WindowsAudio::effectFile(const std::filesystem::path& path,float gain) {
+    if (!ready()) return;
+    play(load(path),gain,0,false,true);
+}
 void WindowsAudio::music(const std::string& name,bool loop) {
     // SoundManager.playSoundInBackground keeps the current track's playhead.
     if(currentMusic_==name && musicLoop_==loop && musicPlaying())return;
@@ -118,17 +123,43 @@ void WindowsAudio::music(const std::string& name,bool loop) {
     musicVolume_=.2f*sound->second.second;
     music_->SetVolume(musicEnabled_ ? musicVolume_ : 0.f);
     if (FAILED(music_->SubmitSourceBuffer(&buffer)) || FAILED(music_->Start())) {report("AUDIO ERROR music playback="+name); stopMusic(); return;}
+    musicSampleRate_=clip.format.nSamplesPerSec;
     currentMusic_=name;musicLoop_=loop;
     report("AUDIO music="+name+" loop="+std::to_string(loop)+" gain="+std::to_string(.2f*sound->second.second));
     ++submitted_;
 }
+void WindowsAudio::musicFile(const std::filesystem::path& path,bool loop,float gain) {
+    // Explicit file playback always starts a fresh cinematic track. Named
+    // background music keeps its separate same-track continuity rule above.
+    stopMusic();
+    if (!ready()) return;
+    auto& clip=load(path);
+    const auto result=engine_->CreateSourceVoice(&music_,&clip.format);
+    if (FAILED(result)) {report("AUDIO ERROR movie music voice HRESULT="+std::to_string(result));return;}
+    XAUDIO2_BUFFER buffer{};
+    buffer.Flags=XAUDIO2_END_OF_STREAM;buffer.AudioBytes=UINT32(clip.data.size());buffer.pAudioData=clip.data.data();
+    buffer.LoopCount=loop ? XAUDIO2_LOOP_INFINITE : 0;
+    musicVolume_=gain;music_->SetVolume(musicEnabled_ ? musicVolume_ : 0.f);
+    if (FAILED(music_->SubmitSourceBuffer(&buffer)) || (!paused_ && FAILED(music_->Start()))) {
+        report("AUDIO ERROR movie music playback");stopMusic();return;
+    }
+    movieMusic_=true;musicLoop_=loop;musicSampleRate_=clip.format.nSamplesPerSec;
+    ++submitted_;
+    report("AUDIO movie music loop="+std::to_string(loop)+" gain="+std::to_string(gain));
+}
 void WindowsAudio::stopMusic() {
     if (music_) {music_->DestroyVoice(); music_=nullptr;}
     currentMusic_.clear();
+    movieMusic_=false;musicSampleRate_=0;
 }
 void WindowsAudio::stopNarration() {
     for (auto& voice:voices_) if (voice.source && voice.narration) {
         voice.source->Stop(); voice.source->FlushSourceBuffers(); voice.narration=false;
+    }
+}
+void WindowsAudio::stopMovieEffects() {
+    for (auto& voice:voices_) if (voice.source && voice.cinematic && !voice.narration) {
+        voice.source->Stop();voice.source->FlushSourceBuffers();voice.cinematic=false;
     }
 }
 void WindowsAudio::setMuted(bool muted) {
@@ -148,6 +179,10 @@ void WindowsAudio::setMusicEnabled(bool enabled) {
 void WindowsAudio::setPaused(bool paused) {
     if (paused_==paused) return;
     paused_=paused;
+    if (music_ && movieMusic_) {
+        if (paused) music_->Stop();
+        else music_->Start();
+    }
     for (auto& voice:voices_) if (voice.source) {
         if (paused) voice.source->Stop();
         else voice.source->Start();
@@ -183,5 +218,8 @@ unsigned long long WindowsAudio::musicSamplesPlayed() const {
     if(!music_)return 0;
     XAUDIO2_VOICE_STATE state{};music_->GetState(&state);
     return state.SamplesPlayed;
+}
+double WindowsAudio::musicSeconds() const {
+    return music_ && musicSampleRate_ ? double(musicSamplesPlayed())/musicSampleRate_ : 0.;
 }
 }

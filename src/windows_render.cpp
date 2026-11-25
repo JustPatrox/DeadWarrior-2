@@ -169,7 +169,7 @@ struct HardwareRenderer::Device {
     }
 
     ID2D1Bitmap* texture(const Draw& d) {
-        if(d.children) {
+        if(d.children || d.pixels) {
             const auto pixels=compositor.image(d);
             if(compositePixels==pixels && compositeBitmap) return compositeBitmap.Get();
             std::vector<BYTE> bgra(pixels->rgba.size());
@@ -207,7 +207,7 @@ struct HardwareRenderer::Device {
     }
 
     void predict(const Draw& d) {
-        if(!prefetchEnabled || d.children)return;
+        if(!prefetchEnabled || d.children || d.pixels)return;
         switch(d.symbol) {
         case 6465:case 6550:case 6730:case 6815:case 7024:
         case 7388:case 7519:case 7525:case 7514:break;
@@ -315,7 +315,7 @@ bool HardwareRenderer::draw(HWND hwnd,int w,int h,const std::vector<Draw>& draws
         const auto r=rectangle(item.target);
         if (r.bottom<=0 || r.top>=Viewport::height || r.right<=Viewport::left || r.left>=Viewport::right ||
             r.right<=r.left || r.bottom<=r.top || item.alpha<=0) continue;
-        if (!item.symbol && !item.children) { d.shape(item,r); continue; }
+        if (!item.symbol && !item.children && !item.pixels) { d.shape(item,r); continue; }
         auto* bitmap=d.texture(item);
         if (!bitmap) { complete=false; break; }
         if (item.rotation || item.mirrored) {

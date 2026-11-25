@@ -10,6 +10,14 @@ import tarfile
 import zipfile
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action",choices=("assets","pack"))
@@ -56,7 +64,7 @@ def main():
         with zipfile.ZipFile(file,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
             for entry in sorted(args.prefix.rglob("*")):
                 if entry.is_file(): archive.write(entry,entry.relative_to(args.prefix))
-    digest=hashlib.sha256(file.read_bytes()).hexdigest()
+    digest=sha256_file(file)
     file.with_suffix(file.suffix+".sha256").write_text(f"{digest}  {file.name}\n")
     print(file,digest)
 

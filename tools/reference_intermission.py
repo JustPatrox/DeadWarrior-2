@@ -26,7 +26,7 @@ def swf_tag(tag,body):
     return header+(struct.pack("<I",length) if length>=63 else b"")+body
 
 
-def diagnostic_copy(source=SOURCE):
+def diagnostic_copy(source=SOURCE, original_swf=None):
     ffdec=WORK/"tools/ffdec"
     java=next((WORK/"tools").glob("*/bin/server/jvm.dll"))
     jpype.startJVM(str(java),"-Xmx1g",classpath=list((ffdec/"lib").glob("*.jar")))
@@ -48,7 +48,7 @@ def diagnostic_copy(source=SOURCE):
     buffer=J("java.io.ByteArrayOutputStream")()
     abc.saveToStream(J(flash+"abc.ABCOutputStream")(buffer))
     abc_bytes=bytes(buffer.toByteArray())
-    original=(root/"stickwar2.swf").read_bytes()
+    original=Path(original_swf or root/"stickwar2.swf").read_bytes()
     data=zlib.decompress(original[8:])
     pos=(5+4*(data[0]>>3)+7)//8+4
     while pos<len(data):

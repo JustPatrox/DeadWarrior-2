@@ -4,6 +4,7 @@
 #include "campaign_intermission.hpp"
 #include "pause_menu.hpp"
 #include "work_in_progress.hpp"
+#include "intro_movie.hpp"
 #include <SDL3/SDL_main.h>
 #include <algorithm>
 #include <chrono>
@@ -24,6 +25,9 @@ class Application {
     CampaignMenu menu_;
     SdlRenderer renderer_;
     SdlAudio audio_;
+    IntroMovie intro_;
+    IntroClock introClock_;
+    bool introPlaying_{};
     SdlDisplay display_;
     PauseMenu pause_;
     CampaignProgress progress_;
@@ -50,6 +54,7 @@ class Application {
     void paused(bool value) {pause_.setOpen(value);audio_.paused(value||display_.isOpen());if(battle_) {battle_->release({});battle_->point({});}}
     void toggleSettings() {
         display_.setOpen(!display_.isOpen());audio_.paused(display_.isOpen()||pause_.isOpen());
+        if(introPlaying_)introClock_.pause(display_.isOpen());
         if(battle_) {battle_->point({});battle_->release({});}
     }
     void mainMenu() {
@@ -84,19 +89,43 @@ class Application {
             else if(event==E::Guide) unsupported("campaign guide");
         }
     }
+    void stopIntro(bool resumeMenu) {
+        if(!introPlaying_)return;
+        introPlaying_=false;intro_.stop();menu_.setIntroPixels({});
+        audio_.stopMovieEffects();audio_.stopMusic();audio_.paused(false);log("INTRO stopped");
+        if(resumeMenu)audio_.music("loginMusic");
+    }
+    void syncIntro() {
+        const bool wanted=menu_.page()==Page::Intro&&!battle_&&!campaign_&&!wip_;
+        if(!wanted) {stopIntro(!battle_&&!campaign_&&!wip_);return;}
+        if(!introPlaying_) {
+            if(!intro_.available()) {log("INTRO resources unavailable; continuing campaign");menu_.finishIntro();menuActions();return;}
+            intro_.start();introClock_.begin();introPlaying_=true;
+            audio_.musicFile(intro_.music());menu_.setIntroPixels(intro_.pixels());
+            log("INTRO started fps=30 first=3 last=3235");
+        }
+    }
+    void updateIntro() {
+        if(!introPlaying_)return;
+        intro_.advance(introClock_.seconds(audio_.musicPlaying(),audio_.musicSeconds(),intro_.duration()));
+        for(const auto& file:intro_.takeEffects())audio_.effectFile(file);
+        menu_.setIntroPixels(intro_.pixels());
+        if(intro_.finished()) {log("INTRO completed source_frame=3235");menu_.finishIntro();menuActions();}
+    }
     void menuActions() {
         for(auto action:menu_.takeActions()) switch(action) {
             case Action::ClickSound:audio_.effect("clickButton",0,false);break;
             case Action::MusicToggle:audio_.channels(menu_.music(),menu_.music());break;
-            case Action::Map:progress_={};progress_.difficulty=menu_.difficulty();startBattle();break;
+            case Action::Map:stopIntro(false);progress_={};progress_.difficulty=menu_.difficulty();startBattle();break;
             case Action::LoadCampaign:if(saved_) {progress_=*saved_;if(progress_.level>=CampaignProgress::playableLevelCount) unfinished();else openCampaign(CampaignIntermission::Page::Map);}break;
             case Action::Online:SDL_OpenURL("https://www.stickempires.com");break;
             case Action::FirstGame:SDL_OpenURL("https://www.stickpage.com/stickwargame.shtml");break;
             case Action::Stickpage:SDL_OpenURL("https://www.stickpage.com");break;
-            case Action::IntroLink:unsupported("intro video");break;
+            case Action::IntroLink:break;
             case Action::Unavailable:unsupported("main menu");break;
             default:break;
         }
+        syncIntro();
     }
     void pauseAction(PauseMenu::Action action) {
         using A=PauseMenu::Action;
@@ -121,7 +150,7 @@ public:
     Application(SDL_Window* window,fs::path root,fs::path saves)
         :window_(window),root_(std::move(root)),assetsDir_(root_/"assets"),saveDir_(std::move(saves)),
          log_(saveDir_/"lastest.log",std::ios::trunc),art_(assetsDir_/"menu"),menu_(art_),renderer_(window,art_,root_),
-         audio_(assetsDir_/"audio",[this](std::string text){log(text);}),display_(window,renderer_.native(),saveDir_/"options.ini"),pause_(art_) {
+         audio_(assetsDir_/"audio",[this](std::string text){log(text);}),intro_(assetsDir_/"intro",loadSdlPng,true),display_(window,renderer_.native(),saveDir_/"options.ini"),pause_(art_) {
         for(const char* folder:{"tutorial","archidon","shadow","magic","rebels","giants","bomber","knight","deads","crawlers","interaction","wip","pause"}) art_.loadTextures(assetsDir_/folder);
         loadSave();menu_.restart(saved_.has_value());
         if(auto icon=SDL_LoadPNG((root_/"icon.png").string().c_str())) {SDL_SetWindowIcon(window_,icon);SDL_DestroySurface(icon);}
@@ -167,7 +196,8 @@ public:
             optionPending_=false;
         } else if(key==SDLK_INSERT) {toggleSettings();return;}
         if(key==SDLK_F11) {display_.fullscreen();return;}
-        if(display_.isOpen()) {if(key==SDLK_ESCAPE) {display_.setOpen(false);audio_.paused(pause_.isOpen());}else display_.key(key);return;}
+        if(display_.isOpen()) {if(key==SDLK_ESCAPE) {display_.setOpen(false);audio_.paused(pause_.isOpen());if(introPlaying_)introClock_.pause(false);}else display_.key(key);return;}
+        if(introPlaying_&&key==SDLK_ESCAPE) {menu_.finishIntro();menuActions();return;}
         if(pause_.isOpen()) {
             int code=key==SDLK_ESCAPE||key==SDLK_P ? 27 : key==SDLK_UP ? 38 : key==SDLK_DOWN ? 40 : key==SDLK_LEFT ? 37 : key==SDLK_RIGHT ? 39 : key==SDLK_TAB ? 9 : key==SDLK_RETURN ? 13 : key==SDLK_SPACE ? 32 : 0;
             pauseAction(pause_.key(code));return;
@@ -205,7 +235,7 @@ public:
                 lastStep_=battle_->stepNumber();lastLogTick_=battle_->ticks();const auto state=battle_->battleStatus();
                 log("BATTLE level="+std::to_string(progress_.level+1)+" step="+std::to_string(lastStep_)+" tick="+std::to_string(lastLogTick_)+" statues="+std::to_string(state.playerStatue)+"/"+std::to_string(state.enemyStatue));
             }
-        } else if(campaign_) {campaign_->tick();campaignEvents();}else {menu_.tick();menuActions();}
+        } else if(campaign_) {campaign_->tick();campaignEvents();}else {menu_.tick();menuActions();updateIntro();}
     }
     void draw(int width,int height,const fs::path& snapshot={}) {
         display_.configureViewport(width,height);
@@ -293,7 +323,18 @@ public:
         click({161,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::NewOrContinue,"Native menu input failed");
         click({437,664});for(int i=0;i<50;++i) tick();require(menu_.page()==Page::Difficulty,"New campaign input failed");
         click({154,668});for(int i=0;i<100;++i) tick();require(menu_.page()==Page::Intro,"Difficulty input failed");
+        require(introPlaying_&&intro_.pixels(),"Authored intro did not autoplay");
+        for(const auto& hit:menu_.hits())require(hit.symbol!=998&&hit.symbol!=1044,"Intro retained an invisible image link");
+        const int introBefore=intro_.sourceFrame();SDL_Delay(220);tick();
+        require(intro_.sourceFrame()>introBefore,"Audio presentation clock did not advance the intro");
+        draw(1280,720,out/"intro.png");
+        toggleSettings();const int pausedFrame=intro_.sourceFrame();const auto pausedSamples=audio_.musicSamplesPlayed();
+        SDL_Delay(180);for(int i=0;i<8;++i)tick();
+        require(intro_.sourceFrame()==pausedFrame&&audio_.musicSamplesPlayed()==pausedSamples,"PC settings did not pause movie pixels and audio");
+        key(SDLK_ESCAPE);require(!display_.isOpen()&&introPlaying_,"Closing PC settings skipped the movie");
+        SDL_Delay(120);tick();require(intro_.sourceFrame()>pausedFrame,"Movie did not resume after PC settings");
         click({434,639});for(int i=0;i<80;++i) tick();require(bool(battle_),"Skip intro did not open tutorial");
+        require(!introPlaying_&&!intro_.pixels(),"Skip retained cinematic pixels or playback state");
         for(int i=0;i<40;++i) tick();draw(1280,720,out/"tutorial.png");
         click({650,397});require(battle_->battleStatus().selectedMilitary==1,"Single click selected overlapping units");
         pointer(1,Point{580,260});pointer(0,Point{720,510});pointer(2,Point{720,510});
@@ -410,7 +451,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true,\"singleClickSelection\":true,\"dragSelection\":true,\"castleArcherTiers\":true,\"tacticalCommands\":true,\"blockStance\":true,\"towerSpawn\":true,\"musicContinuity\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true,\"singleClickSelection\":true,\"dragSelection\":true,\"castleArcherTiers\":true,\"tacticalCommands\":true,\"blockStance\":true,\"towerSpawn\":true,\"musicContinuity\":true,\"introAutoplay\":true,\"introPause\":true,\"introSkip\":true}\n";
         log("SELF-TEST passed");
     }
 };

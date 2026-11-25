@@ -475,6 +475,12 @@ void CampaignTutorial::moveFormation(const std::vector<Unit*>& group,Point p,boo
         // UnitAi.setCommand skips stateFixForCutToWalk for AI teams. Macro
         // defend/attack orders must not restart an enemy's ongoing strike.
         if(u.enemy && u.pose.starts_with("attack_"))continue;
+        // EnslavedGiant.stateFixForCutToWalk preserves an active throw. Its
+        // shoot() target remains available for the frame-33 depth aim even
+        // after the AI receives a new movement command.
+        if(u.symbol==enslavedGiant && u.pose.starts_with("attack_")) {
+            u.order=Order::Move;u.hold=false;continue;
+        }
         // UnitAi.setCommand preserves an existing attack when replacing an
         // ATTACK_MOVE with another ATTACK_MOVE. Keep the new formation goal.
         // Monk.stateFixForCutToWalk preserves the cast, but setCommand still
@@ -543,6 +549,11 @@ void CampaignTutorial::press(Point p) {
         aimedAttackMove_=false; aimedSpell_=0;
         const bool hold=actionHit(9,p);
         for (auto& u:units_) if (u.selected && !u.enemy && u.hp>0) {
+            // Stand/Hold have targetId=-1, so UnitAi.setCommand cuts normal
+            // strikes while the throwing/casting overrides keep their event.
+            if(u.pose.starts_with("attack_") && u.symbol!=enslavedGiant && !u.spell) {
+                animate(u,"run");u.hit=true;
+            }
             u.order=Order::Stand; u.engageOnMove=true; u.hold=hold;u.idleFacing=0; u.velocity={}; u.goal=u.position;
         }
         sound(hold ? "CommandHoldSound" : "CommandStopSound",{},false);
@@ -644,6 +655,11 @@ void CampaignTutorial::command(Point p) {
     sound("CommandMove"+std::to_string(1+soundSequence_++%6),{},false);
     if (target.kind==CommandTarget::Enemy) {
         for (auto& u:units_) if (u.selected && u.hp>0 && !u.enemy) {
+            // UnitAi.setCommand cuts an allied strike when its target changes.
+            // EnslavedGiant keeps an ongoing throw; Monk/Magikill keep live spells.
+            if(u.target!=target.id && u.pose.starts_with("attack_") && u.symbol!=enslavedGiant && !u.spell) {
+                animate(u,"run");u.hit=true;
+            }
             u.garrisoned=false; u.engageOnMove=false;u.idleFacing=0; u.hold=false; u.target=target.id; u.order=Order::Attack;
         }
         return;

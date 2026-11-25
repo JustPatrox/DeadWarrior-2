@@ -9,8 +9,10 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <utility>
 
 namespace sw2 {
+struct Raster;
 struct Point { double x{}, y{}; };
 struct Rect {
     double x{}, y{}, w{}, h{};
@@ -77,6 +79,7 @@ struct Draw {
     static Draw group(std::vector<Draw>,Point origin);
     std::vector<Point> vertices;
     double lineWidth{1};
+    std::shared_ptr<const Raster> pixels;
     static Draw shape(Kind kind,Rect target,unsigned color,double opacity=1);
     static Draw label(Rect target,std::string text,double size,unsigned color,bool centered=false);
 };
@@ -102,6 +105,8 @@ public:
     bool music() const { return music_; }
     void setMusic(bool enabled) { music_=enabled; }
     Difficulty difficulty() const { return difficulty_; }
+    void setIntroPixels(std::shared_ptr<const Raster> pixels) {introPixels_=std::move(pixels);}
+    void finishIntro();
 private:
     const MenuAssets& assets_;
     Page page_{Page::Opening};
@@ -111,6 +116,7 @@ private:
     double overlay_{};
     std::array<double,4> panelY_{};
     std::vector<Action> actions_;
+    std::shared_ptr<const Raster> introPixels_;
     void activate(int symbol);
     int panel() const;
     int buttonFrame(int id) const;

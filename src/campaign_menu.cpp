@@ -1,4 +1,5 @@
 #include "campaign_menu.hpp"
+#include "raster_compositor.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -104,6 +105,7 @@ CampaignMenu::CampaignMenu(const MenuAssets& a,bool save) : assets_(a),hasSave_(
     restart(save);
 }
 void CampaignMenu::restart(bool hasSave) {
+    introPixels_.reset();
     hasSave_=hasSave; page_=Page::Opening; difficulty_=Difficulty::Normal;
     frame_=1; hover_=pressed_=delay_=pending_=introTicks_=0;
     credits_=false; overlay_=0; actions_.clear();
@@ -145,12 +147,15 @@ void CampaignMenu::activate(int id) {
     case 1009: page_=Page::Difficulty; break;
     case 1015: case 1021: case 1018:
         difficulty_ = id==1015 ? Difficulty::Normal : id==1021 ? Difficulty::Hard : Difficulty::Insane;
-        page_=Page::Intro; introTicks_=0; break;
+        page_=Page::Intro; introTicks_=0; introPixels_.reset(); break;
     case 1010: page_=Page::CampaignMap; actions_.push_back(Action::LoadCampaign); break;
     case 1027: page_=Page::CampaignMap; actions_.push_back(Action::Map); break;
     case 1032: music_=!music_; actions_.push_back(Action::MusicToggle); break;
     case 1036: credits_=true; break;
-    case 1043: if (credits_) credits_=false; else page_=Page::Main; break;
+    case 1043:
+        pending_=delay_=pressed_=0;
+        if (credits_) credits_=false; else page_=Page::Main;
+        break;
     case 708: actions_.push_back(Action::Online); break;
     case 1005: actions_.push_back(Action::FirstGame); break;
     case 1044: actions_.push_back(Action::Stickpage); break;
@@ -222,10 +227,15 @@ void CampaignMenu::compose(std::vector<Draw>& draws,std::vector<Hit>& hits) cons
     }
     sprite(1044,1,422,156.5,1,1,opening ? assets_.alpha(982,std::min(frame_,60)) : 1);
     sprite(699,1,430,209,1,1,opening ? assets_.alpha(983,std::min(frame_,120)) : 1);
-    if (!opening) hits.push_back({1044,{234,142,376,29},0});
+    if (!opening && page_!=Page::Intro) hits.push_back({1044,{234,142,376,29},0});
     if (page_ == Page::Intro) {
         draws.push_back({0,1,stage,1});
-        if (introTicks_>90) root(998,0,true);
+        if(introPixels_) {
+            const double size=std::min(Viewport::width/introPixels_->width,Viewport::height/introPixels_->height);
+            Draw picture;picture.target={Viewport::left+(Viewport::width-introPixels_->width*size)/2,
+                (Viewport::height-introPixels_->height*size)/2,introPixels_->width*size,introPixels_->height*size};
+            picture.pixels=introPixels_;draws.push_back(std::move(picture));
+        }
     }
     for (size_t i=0;i<panels.size();++i) {
         const auto& panelPlacement=assets_.placement(1045,panels[i]);
@@ -251,6 +261,9 @@ void CampaignMenu::compose(std::vector<Draw>& draws,std::vector<Hit>& hits) cons
 std::vector<Draw> CampaignMenu::drawList() const {
     std::vector<Draw> draws; std::vector<Hit> hits;
     compose(draws,hits); return draws;
+}
+void CampaignMenu::finishIntro() {
+    if(page_==Page::Intro)activate(1027);
 }
 std::vector<Hit> CampaignMenu::hits() const {
     std::vector<Draw> draws; std::vector<Hit> hits;

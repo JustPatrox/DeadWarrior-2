@@ -82,7 +82,19 @@ jobs:
       - name: Compile native game and campaign probes
         run: cmake --build build/native --config Release --parallel 3 --target DeadWarrior2 campaign_probes
       - name: Run deterministic campaign checks
-        run: ctest --test-dir build/native -C Release --output-on-failure
+        run: |
+          set -euo pipefail
+          ctest --test-dir build/native -C Release --output-on-failure
+          mkdir -p out/checks
+          ctest --test-dir build/native -C Release --show-only=json-v1 > out/checks/ctest-inventory.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          tests=json.loads(Path('out/checks/ctest-inventory.json').read_text())['tests']
+          names=[item['name'] for item in tests]
+          assert len(names)==len(set(names))==21, names
+          assert {'intro_probe','intro_cache_probe'}.issubset(names), names
+          PY
       - name: Install ready-to-play package
         run: cmake --install build/native --config Release --prefix out/package
       - name: Test Linux window, renderer, input, audio, pause and saves
@@ -101,6 +113,24 @@ jobs:
         env:
           SDL_AUDIO_DRIVER: dummy
         run: '"out/package/DeadWarrior 2.app/Contents/MacOS/DeadWarrior 2" --smoke-test out/checks --save-dir out/test-save'
+      - name: Verify portable intro and platform report
+        if: runner.os != 'Windows'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path('out/checks/checks.json').read_text())
+          assert report['missionEntries']==10
+          assert all(value for value in report.values() if isinstance(value,bool))
+          for name in ('tacticalCommands','blockStance','towerSpawn','musicContinuity',
+                       'singleClickSelection','dragSelection','castleArcherTiers',
+                       'introAutoplay','introPause','introSkip'):
+              assert report[name] is True, name
+          expected=('macOS','Option') if os.environ['RUNNER_OS']=='macOS' else ('Linux','Insert')
+          assert (report['platform'],report['settingsKey'])==expected
+          assert report['settingsKeyVerified'] is True
+          PY
       - name: Package native download
         run: python tools/package_release.py pack --name '${{ matrix.package }}'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

@@ -1,4 +1,5 @@
 #include "sdl_platform.hpp"
+#include "sdl_ellipse.hpp"
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 #include <algorithm>
@@ -13,14 +14,15 @@ namespace {
 SDL_FRect rect(Rect r,const Viewport& v) {return {float(v.pixels.x+(r.x-Viewport::left)*v.scaleX),float(v.pixels.y+r.y*v.scale),float(r.w*v.scaleX),float(r.h*v.scale)};}
 SDL_Color color(const Draw& d) {return {Uint8(d.color>>16),Uint8(d.color>>8),Uint8(d.color),Uint8(std::clamp(d.alpha,0.,1.)*255)};}
 }
-SdlRenderer::SdlRenderer(SDL_Window* window,const MenuAssets& art,const std::filesystem::path& root):art_(art),compositor_(art,[](const std::filesystem::path& path) {
+Raster loadSdlPng(const std::filesystem::path& path) {
     auto loaded=SDL_LoadPNG(path.string().c_str());if(!loaded) throw std::runtime_error(SDL_GetError());
     auto surface=SDL_ConvertSurface(loaded,SDL_PIXELFORMAT_RGBA32);SDL_DestroySurface(loaded);
     if(!surface) throw std::runtime_error(SDL_GetError());
     Raster r;r.width=surface->w;r.height=surface->h;r.rgba.resize(size_t(r.width)*r.height*4);
     for(int y=0;y<r.height;++y) std::copy_n(static_cast<Uint8*>(surface->pixels)+y*surface->pitch,r.width*4,r.rgba.data()+size_t(y)*r.width*4);
     SDL_DestroySurface(surface);return r;
-}),root_(root) {
+}
+SdlRenderer::SdlRenderer(SDL_Window* window,const MenuAssets& art,const std::filesystem::path& root):art_(art),compositor_(art,loadSdlPng),root_(root) {
     renderer_=SDL_CreateRenderer(window,nullptr);
     if(!renderer_) throw std::runtime_error(std::string("Renderer initialization failed: ")+SDL_GetError());
     SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
@@ -117,8 +119,8 @@ void SdlRenderer::draw(const std::vector<Draw>& draws,int w,int h) {
     for(const auto& d:draws) {
         auto dst=rect(d.target,v);
         if(dst.w<=0||dst.h<=0||dst.x+dst.w<0||dst.x>w||dst.y+dst.h<0||dst.y>h) continue;
-        if(d.symbol || d.children) {
-            auto texture=d.children ? composite(d) : image(art_.texture(d.symbol,d.frame).file,d.redOffset);
+        if(d.symbol || d.children || d.pixels) {
+            auto texture=d.children || d.pixels ? composite(d) : image(art_.texture(d.symbol,d.frame).file,d.redOffset);
             SDL_SetTextureAlphaMod(texture,Uint8(std::clamp(d.alpha,0.,1.)*255));
             SDL_FRect source{};if(d.source) {float tw,th;SDL_GetTextureSize(texture,&tw,&th);const auto a=*d.source;source={float(a.x*tw),float(a.y*th),float(a.w*tw),float(a.h*th)};}
             SDL_RenderTextureRotated(renderer_,texture,d.source ? &source : nullptr,&dst,d.rotation,nullptr,d.mirrored ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
@@ -126,13 +128,15 @@ void SdlRenderer::draw(const std::vector<Draw>& draws,int w,int h) {
             const auto c=color(d);SDL_SetRenderDrawColor(renderer_,c.r,c.g,c.b,c.a);
             if(d.kind==Draw::Kind::Text) text(d,v);
             else if(d.kind==Draw::Kind::Outline) SDL_RenderRect(renderer_,&dst);
-            else if(d.kind==Draw::Kind::Polygon || d.kind==Draw::Kind::Ellipse) {
+            else if(d.kind==Draw::Kind::Ellipse) {
+                const SDL_FColor shade{c.r/255.f,c.g/255.f,c.b/255.f,c.a/255.f};
+                const auto vertices=detail::ellipseVertices(dst,shade);
+                const auto& indices=detail::ellipseIndices();
+                SDL_RenderGeometry(renderer_,nullptr,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()));
+            } else if(d.kind==Draw::Kind::Polygon) {
                 std::vector<SDL_Vertex> vertices;std::vector<int> indices;
                 const SDL_FColor shade{c.r/255.f,c.g/255.f,c.b/255.f,c.a/255.f};
-                if(d.kind==Draw::Kind::Ellipse) {
-                    vertices.push_back({{dst.x+dst.w/2,dst.y+dst.h/2},shade,{0,0}});
-                    for(int i=0;i<=40;++i) {const double a=i*2*std::numbers::pi/40;vertices.push_back({{dst.x+dst.w/2+dst.w/2*float(std::cos(a)),dst.y+dst.h/2+dst.h/2*float(std::sin(a))},shade,{0,0}});}
-                } else for(auto p:d.vertices) vertices.push_back({{dst.x+float(p.x*v.scaleX),dst.y+float(p.y*v.scale)},shade,{0,0}});
+                for(auto p:d.vertices) vertices.push_back({{dst.x+float(p.x*v.scaleX),dst.y+float(p.y*v.scale)},shade,{0,0}});
                 for(int i=1;i+1<int(vertices.size());++i) {indices.push_back(0);indices.push_back(i);indices.push_back(i+1);}
                 if(!indices.empty()) SDL_RenderGeometry(renderer_,nullptr,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()));
             } else if(d.kind==Draw::Kind::Line) {

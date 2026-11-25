@@ -7,6 +7,7 @@
 #include "campaign_menu.hpp"
 #include "campaign_tutorial.hpp"
 #include "campaign_intermission.hpp"
+#include "intro_movie.hpp"
 #include "windows_display.hpp"
 #include "windows_render.hpp"
 #include "windows_save.hpp"
@@ -113,7 +114,7 @@ public:
             auto dst=pixels(d.target);
             if (dst.Y>=h || dst.GetBottom()<=0 || dst.X>=w || dst.GetRight()<=0 ||
                 dst.Width<=0 || dst.Height<=0) continue;
-            if (!d.symbol && !d.children) {
+            if (!d.symbol && !d.children && !d.pixels) {
                 const gd::Color color(BYTE(std::lround(d.alpha*255)),BYTE(d.color>>16),BYTE(d.color>>8),BYTE(d.color));
                 gd::SolidBrush field(color);
                 switch (d.kind) {
@@ -142,7 +143,7 @@ public:
                 }
                 continue;
             }
-            auto& img=d.children ? composite(d) : bitmap(d.symbol,d.frame);
+            auto& img=(d.children || d.pixels) ? composite(d) : bitmap(d.symbol,d.frame);
             gd::ImageAttributes attributes;
             attributes.SetWrapMode(gd::WrapModeTileFlipXY);
             if (d.alpha<1 || d.redOffset) {
@@ -188,6 +189,9 @@ class Window {
     bool pauseButtonDown_{};
     bool pcButtonDown_{},cursorConfined_{};
     WindowsAudio soundPlayer_;
+    IntroMovie intro_;
+    IntroClock introClock_;
+    bool introPlaying_{};
     std::unique_ptr<CampaignTutorial> tutorial_;
     std::unique_ptr<CampaignIntermission> intermission_;
     std::unique_ptr<WorkInProgress> unfinished_;
@@ -370,6 +374,38 @@ class Window {
         else return;
         soundPlayer_.effect("clickButton",0,false);
     }
+    void stopIntro(bool resumeMenu) {
+        if(!introPlaying_)return;
+        introPlaying_=false;intro_.stop();menu_.setIntroPixels({});
+        soundPlayer_.stopMovieEffects();soundPlayer_.stopMusic();soundPlayer_.setPaused(false);
+        logEvent("INTRO stopped");
+        if(resumeMenu)soundPlayer_.music("loginMusic");
+    }
+    void syncIntro() {
+        const bool wanted=menu_.page()==Page::Intro && !tutorial_ && !intermission_ && !unfinished_;
+        if(!wanted) {stopIntro(!tutorial_&&!intermission_&&!unfinished_);return;}
+        if(!introPlaying_) {
+            if(!intro_.available()) {
+                logEvent("INTRO resources unavailable; continuing campaign");menu_.finishIntro();actions();return;
+            }
+            intro_.start();introClock_.begin();introPlaying_=true;
+            soundPlayer_.musicFile(intro_.music());menu_.setIntroPixels(intro_.pixels());
+            logEvent("INTRO started fps=30 first=3 last=3235");
+        }
+    }
+    void updateIntro() {
+        if(!introPlaying_)return;
+        const auto start=Clock::now();const auto before=intro_.statistics();
+        intro_.advance(introClock_.seconds(soundPlayer_.musicPlaying(),soundPlayer_.musicSeconds(),intro_.duration()));
+        for(const auto& file:intro_.takeEffects())soundPlayer_.effectFile(file);
+        menu_.setIntroPixels(intro_.pixels());
+        const auto after=intro_.statistics();
+        const double elapsed=std::chrono::duration<double,std::milli>(Clock::now()-start).count();
+        if(elapsed>50)logEvent("INTRO hitch total_ms="+std::to_string(elapsed)+" png_ms="+std::to_string(after.decodeMilliseconds-before.decodeMilliseconds)+
+            " compose_ms="+std::to_string(after.composeMilliseconds-before.composeMilliseconds)+" decodes="+std::to_string(after.decodes-before.decodes)+
+            " source_frame="+std::to_string(intro_.sourceFrame()));
+        if(intro_.finished()) {logEvent("INTRO completed source_frame=3235");menu_.finishIntro();actions();}
+    }
     void actions() {
         for (auto action:menu_.takeActions()) {
             const wchar_t* url=nullptr;
@@ -385,9 +421,9 @@ class Window {
             case Action::Online: url=L"http://www.stickempires.com"; break;
             case Action::FirstGame: url=L"http://www.stickpage.com/stickwargame.shtml"; break;
             case Action::Stickpage: url=L"http://www.stickpage.com"; break;
-            case Action::IntroLink: url=L"http://www.stickpage.com/stickwar2orderempireintro.shtml"; break;
+            case Action::IntroLink: break;
             case Action::Map:
-                progress_=CampaignProgress{}; progress_.difficulty=menu_.difficulty(); startMission(); break;
+                stopIntro(false);progress_=CampaignProgress{}; progress_.difficulty=menu_.difficulty(); startMission(); break;
             case Action::LoadCampaign:
                 if (saved_) {progress_=*saved_; if (progress_.level>=CampaignProgress::playableLevelCount) showUnfinished(); else openIntermission(CampaignIntermission::Page::Map);}
                 break;
@@ -396,6 +432,7 @@ class Window {
             }
             if (url) ShellExecuteW(hwnd_,L"open",url,nullptr,nullptr,SW_SHOWNORMAL);
         }
+        syncIntro();
     }
     int target() {
         if (showingNotice_ || tutorial_ || intermission_ || unfinished_ || display_.isOpen()) return 0;
@@ -411,7 +448,7 @@ class Window {
             gameDeadline_=now+gameInterval;
             soundPlayer_.music("loginMusic");
         }
-        if (tutorial_ && (pause_.isOpen() || display_.isOpen())) {
+        if (display_.isOpen() || (tutorial_ && pause_.isOpen())) {
             gameDeadline_=now+gameInterval;
             return;
         }
@@ -483,6 +520,7 @@ class Window {
                 menu_.hover(target());
                 menu_.tick();
                 actions();
+                updateIntro();
             }
         }
     }
@@ -562,7 +600,16 @@ class Window {
             logEvent(std::string("RENDER backend=")+(accelerated ? "Direct2D" : "GDI+")+
                 " client="+std::to_string(r.right)+"x"+std::to_string(r.bottom));
         }
-        if (!accelerated) softwareDraw(dc,r.right,r.bottom,draws);
+        if (!accelerated) {
+            // A screen DC is needed only for the GDI+ path. Do not keep a
+            // BeginPaint DC open across Direct2D presentation: EndPaint can
+            // restore the earlier GDI redirection surface over that frame.
+            HDC softwareDc=dc ? dc : GetDC(hwnd_);
+            if (!softwareDc) throw std::runtime_error("Cannot acquire the game window DC");
+            try {softwareDraw(softwareDc,r.right,r.bottom,draws);}
+            catch (...) {if (!dc) ReleaseDC(hwnd_,softwareDc);throw;}
+            if (!dc) ReleaseDC(hwnd_,softwareDc);
+        }
         if (present) {
             const auto end=Clock::now();
             presentedFrames_.push_back(end);
@@ -599,15 +646,16 @@ class Window {
         if (tutorial_) tutorial_->release({});
         if (intermission_) {intermission_->point({}); intermission_->release();}
         display_.setOpen(open);
-        soundPlayer_.setPaused(tutorial_ && (open || pause_.isOpen()));
-        if (tutorial_) gameDeadline_=Clock::now()+gameInterval;
+        soundPlayer_.setPaused((tutorial_ && (open || pause_.isOpen())) || (introPlaying_ && open));
+        if(introPlaying_)introClock_.pause(open);
+        if (tutorial_ || introPlaying_) gameDeadline_=Clock::now()+gameInterval;
         if (showingNotice_) InvalidateRect(hwnd_,nullptr,FALSE);
     }
     void paint() {
         PAINTSTRUCT paint{};
-        HDC dc=BeginPaint(hwnd_,&paint);
-        drawClient(dc,true);
+        BeginPaint(hwnd_,&paint);
         EndPaint(hwnd_,&paint);
+        drawClient(nullptr,true);
     }
     void toggleFullscreen() {
         using Mode=DisplaySettings::Mode;
@@ -703,6 +751,8 @@ class Window {
         case WM_APP+30: return capturePath_.empty() || !tutorial_ ? -2 : tutorial_->defenceStatus().researchTicks;
         case WM_APP+31: return capturePath_.empty() || !tutorial_ ? -1 : tutorial_->battleStatus().gold;
         case WM_APP+32: return capturePath_.empty() ? 0 : LRESULT(soundPlayer_.musicSamplesPlayed());
+        case WM_APP+34: return capturePath_.empty() || !introPlaying_ ? 0 : intro_.sourceFrame();
+        case WM_APP+35: return capturePath_.empty() ? 0 : introPlaying_;
         case WM_APP+33:
             return !capturePath_.empty() && tutorial_ && tutorial_->prepareTacticalCheck(int(w));
         case WM_APP+26: {
@@ -836,6 +886,7 @@ class Window {
             const bool repeated=(l&(1L<<30))!=0;
             if (w==VK_INSERT && !repeated) showDisplay(!display_.isOpen());
             else if (w==VK_ESCAPE && display_.isOpen() && !repeated) showDisplay(false);
+            else if (w==VK_ESCAPE && introPlaying_ && !repeated) {menu_.finishIntro();actions();}
             else if (w==VK_F11 && !repeated) toggleFullscreen();
             else if (pause_.isOpen() && !display_.isOpen() && !repeated) {
                 if (w=='P') showPause(false);
@@ -934,7 +985,8 @@ public:
     Window(const fs::path& dir,MenuAssets& assets,bool diagnostic,const fs::path& trace,const fs::path& saveDir,
            const fs::path& frameTiming,bool software,const fs::path& capture)
         :directory_(dir),saveDirectory_(saveDir),capturePath_(capture),saved_(loadProgress(saveDir)),assets_(assets),
-         menu_(assets,saved_.has_value()),soundPlayer_(dir.parent_path()/"audio",logEvent),renderer_(assets),hardware_(assets),
+         menu_(assets,saved_.has_value()),soundPlayer_(dir.parent_path()/"audio",logEvent),
+         intro_(dir.parent_path()/"intro",loadWindowsPng,true),renderer_(assets),hardware_(assets),
          studioLogo_((dir.parent_path()/"branding/max-games.png").c_str()),diagnostic_(diagnostic),forceSoftware_(software) {
         logEvent("SAVE directory="+saveDir.string()+" valid="+std::to_string(saved_.has_value()));
         if (studioLogo_.GetLastStatus()!=gd::Ok) throw std::runtime_error("Cannot load Max Games logo");
