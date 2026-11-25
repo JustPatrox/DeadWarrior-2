@@ -88,11 +88,26 @@ def run(width,height,initial_only=False):
                 # moving formation while a larger client finishes loading.
                 # Prefer the back rows: the front worker overlaps the larger
                 # Swordwrath collider, and a single click correctly picks him.
-                worker=min((u for u in units() if u['symbol']=='3104' and u['enemy']=='0' and float(u['health'])>0),key=lambda u:float(u['y']))
-                click(float(worker['x'])-initial['camera'],320+float(worker['y'])-18)
-                wait(lambda s:sum(u['selected']=='1' and u['symbol']=='3104' for u in units())==1)
-                send(0x204,500,320,2);send(0x205,500,320)
-                wait(lambda s:any(u['symbol']=='3104' and u['enemy']=='0' and u['resource']=='-1' for u in units()))
+                # Fund the two Merics and two Magikill with three worshippers.
+                # Let each selected worker leave the overlapping starting rows
+                # before choosing another; every order uses the real mouse path.
+                for praying in range(1,4):
+                    picked=False
+                    for attempt in range(12):
+                        workers=sorted((u for u in units() if u['symbol']=='3104' and u['enemy']=='0' and float(u['health'])>0 and u['resource']!='-1'),key=lambda u:float(u['y']))
+                        for worker in workers:
+                            for dx in (0,-10,10):
+                                click(float(worker['x'])-row()['camera']+dx,320+float(worker['y'])-8)
+                                selected=[u for u in units() if u['selected']=='1']
+                                if len(selected)==1 and selected[0]['symbol']=='3104' and selected[0]['resource']!='-1':
+                                    picked=True;break
+                            if picked:break
+                        if picked:break
+                        time.sleep(.1)
+                    assert picked,('No visible unassigned worker could be selected',units())
+                    send(0x204,500,320,2);send(0x205,500,320)
+                    wait(lambda s:sum(u['symbol']=='3104' and u['enemy']=='0' and u['resource']=='-1' for u in units())==praying)
+                    time.sleep(.8)
                 if initial_only:
                     shot('prayer-verified')
                     user.PostMessageW(hwnd,0x10,0,0);assert process.wait(timeout=8)==0
@@ -105,7 +120,7 @@ def run(width,height,initial_only=False):
                 click(310,600);time.sleep(2.6);current=row();assert current['camera']<=201,current
                 click(550-current['camera'],300);click(675,606);wait(lambda s:s.get('research',-1)>=0)
                 click(30,610);click(30,610);click(554,582);wait(lambda s:s.get('fast')==1)
-                next_army=next_cast=previous=0;last_tick=-1;seen=set()
+                next_army=next_cast=previous=0;last_tick=-1;seen=set();attacking=False
                 deadline=time.monotonic()+650
                 while time.monotonic()<deadline:
                     if process.poll() is not None:raise AssertionError(f'Native process exited: {process.returncode}')
@@ -116,7 +131,8 @@ def run(width,height,initial_only=False):
                     last_tick=tick
                     if tick>=next_army:
                         next_army=tick+120
-                        click(500 if current['alliedWizards']>=2 or current['alliedGiants']>=2 else 425,634)
+                        attacking=attacking or current['alliedWizards']>=2 or current['alliedGiants']>=2
+                        click(500 if attacking else 425,634)
                         if current['alliedWizards']>0:space();time.sleep(.02);space()
                     gold,mana=current['gold'],current['mana']
                     swords=current['fighters']-current['alliedHealers']-current['alliedWizards']-current['alliedGiants']-current['archers']
@@ -125,8 +141,8 @@ def run(width,height,initial_only=False):
                     if current['miners']+current['bankQ']<10 and current['bankQ']<5 and gold>=150:click(30,610)
                     elif current['alliedHealers']+current['templeQ']<2 and gold>=300 and mana>=200:click(200,610)
                     elif current['alliedWizards']+current['magicQ']<2 and gold>=500 and mana>=500:click(260,610)
-                    elif swords+current['barracksQ']<6 and gold>=100:click(88,610)
                     elif current['miners']>=10 and gold>=1500 and current['alliedGiants']+current['siegeQ']<2:click(230,665)
+                    elif swords+current['barracksQ']<3 and gold>=150:click(88,610)
                     if tick>=next_cast and current['alliedWizards']>0:
                         next_cast=tick+15
                         x=(current['deadX'] if current['deadX']>=0 else 4149)-current['camera']
@@ -150,7 +166,7 @@ def run(width,height,initial_only=False):
                 record=save.read_text(encoding='utf-8').splitlines();assert record[1].split()[:2]==['9','3'],record[:2]
                 report=dict(resolution=[width,height],victory=True,victoryTick=int(current['tick']),
                     gutsShots=int(current['gutsShots']),poisonHits=int(current['poisonHits']),cures=int(current['cures']),
-                    spells=[int(current[k]) for k in ('nuke','electric','poison')],minersOnlyGarrison=True,initialPrayingMinerVerified=True,
+                    spells=[int(current[k]) for k in ('nuke','electric','poison')],minersOnlyGarrison=True,initialPrayingMinerVerified=True,startingWorshippers=3,
                     savedLevel=9,nextMapFrame=510,magentaPixels=0)
                 (out/f'{prefix}-checks.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8',newline='\n')
                 user.PostMessageW(hwnd,0x10,0,0);assert process.wait(timeout=8)==0
