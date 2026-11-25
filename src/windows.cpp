@@ -702,14 +702,17 @@ class Window {
         case WM_APP+29: return capturePath_.empty() || !tutorial_ ? -1 : tutorial_->defenceStatus().castleArchers;
         case WM_APP+30: return capturePath_.empty() || !tutorial_ ? -2 : tutorial_->defenceStatus().researchTicks;
         case WM_APP+31: return capturePath_.empty() || !tutorial_ ? -1 : tutorial_->battleStatus().gold;
+        case WM_APP+32: return capturePath_.empty() ? 0 : LRESULT(soundPlayer_.musicSamplesPlayed());
+        case WM_APP+33:
+            return !capturePath_.empty() && tutorial_ && tutorial_->prepareTacticalCheck(int(w));
         case WM_APP+26: {
             // Explicit diagnostic capture only; normal play still writes lastest.log.
             if(capturePath_.empty() || !tutorial_) return 0;
             auto path=capturePath_;path.replace_extension(".units.tsv");std::ofstream units(path);
-            units<<"id\tsymbol\tx\ty\thealth\tenemy\tselected\tfacing\tresource\tslot\tbag\torder\tgoalX\tgoalY\tpose\n";
+            units<<"id\tsymbol\tx\ty\thealth\tenemy\tselected\tfacing\tresource\tslot\tbag\torder\tgoalX\tgoalY\tpose\tframe\n";
             int id=0;
             for(const auto& u:tutorial_->unitStatus()) units<<id++<<'\t'<<u.symbol<<'\t'<<u.position.x<<'\t'<<u.position.y<<'\t'<<u.health<<'\t'<<u.enemy
-                <<'\t'<<u.selected<<'\t'<<u.facing<<'\t'<<u.resource<<'\t'<<u.miningSlot<<'\t'<<u.bag<<'\t'<<u.order<<'\t'<<u.goal.x<<'\t'<<u.goal.y<<'\t'<<u.pose<<'\n';
+                <<'\t'<<u.selected<<'\t'<<u.facing<<'\t'<<u.resource<<'\t'<<u.miningSlot<<'\t'<<u.bag<<'\t'<<u.order<<'\t'<<u.goal.x<<'\t'<<u.goal.y<<'\t'<<u.pose<<'\t'<<u.frame<<'\n';
             path=capturePath_;path.replace_extension(".ore.tsv");std::ofstream ores(path);
             ores<<"id\tx\ty\tremaining\ttotal\n";id=0;
             for(const auto& ore:tutorial_->oreStatus())ores<<id++<<'\t'<<ore.position.x<<'\t'<<ore.position.y<<'\t'<<ore.remaining<<'\t'<<ore.total<<'\n';

@@ -169,6 +169,13 @@ Point CampaignTutorial::updateArcher(Unit& u) {
 void CampaignTutorial::unitAbility(int slot) {
     if (cinematic_>=0) return;
     aimedAttackMove_=false;
+    if(!slot && mission_ && upgrades_[4])for(auto& u:units_)if(u.hp>0 && u.selected && !u.enemy && u.symbol==spearton) {
+        if(u.inBlock)u.blocking=false;
+        else {
+            u.blocking=u.inBlock=true;u.order=Order::Stand;u.target=-1;u.hold=false;
+            animate(u,"block");sound("speartonHoghSound",u.position);
+        }
+    }
     if (mission_>=4) for (auto& u:units_) if (u.hp>0 && u.selected && !u.enemy) {
         if (u.symbol==wizard) {
             const int spell=slot==0 ? 1 : slot==1 ? 3 : 2;
@@ -220,17 +227,6 @@ void CampaignTutorial::drawArcher(std::vector<std::pair<double,Draw>>& layers,co
 void CampaignTutorial::updateArchidon() {
     for (auto& u:units_) if (!u.enemy && isWorker(u.symbol) && u.hp>0 && !u.garrisoned &&
         u.resource==-2 && std::abs(u.position.x-u.goal.x)<40) assignFreeMine(u);
-    std::array<bool,2> atTower{};
-    const double previousControl=towerControl_;
-    for (const auto& u:units_) if (u.hp>0 && !u.garrisoned &&
-        std::abs(u.position.x-length_/2)<=150 && std::abs(u.position.y-depth_/2)<=150) atTower[u.enemy]=true;
-    if (atTower[0]!=atTower[1])
-        towerControl_=std::clamp(towerControl_+(atTower[0] ? -1 : 1)*50/rules_.at("towerCaptureTime"),0.,100.);
-    if (previousControl!=0 && towerControl_==0) sound("SelectRaceSound",{},false);
-    if (ticks_%int(rules_.at("hill.frequency"))==0) {
-        if (towerControl_==0) goldBalance_+=int(rules_.at("hill.goldCollectionRate"));
-        if (towerControl_==100) enemyGold_+=int(rules_.at("hill.goldCollectionRate"));
-    }
     if (mission_>=2) {
         if (mission_==2 && !hint_ && std::any_of(units_.begin(),units_.end(),[](const Unit& u){return !u.enemy && u.poison>0;}))
             hint_=3;

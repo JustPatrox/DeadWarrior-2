@@ -60,8 +60,12 @@ def run(width,height,checks):
                     image=capture_from_game(hwnd,capture); image.save(OUT/f"{width}x{height}-{name}.png")
                     assert not np.any(np.all(np.asarray(image)==[255,0,255],axis=2)),name
                 def enter():
-                    time.sleep(11); click(161,664); time.sleep(1.2); click(578,664)
+                    time.sleep(11); click(161,664); time.sleep(1.2)
+                    music_before=user.SendMessageW(hwnd,0x8000+32,0,0)
+                    click(578,664)
                     wait(lambda:state()&1)
+                    time.sleep(.12)
+                    assert music_before>0 and user.SendMessageW(hwnd,0x8000+32,0,0)>=music_before,"WIP reset the current music playhead"
                 enter(); shot("unfinished")
                 assert "previous-session-marker" not in LOG.read_text()
                 assert f"work-in-progress unavailable_level={PLAYABLE+1}" in LOG.read_text()
@@ -144,5 +148,5 @@ def banner_check(width=1280,height=720):
 if __name__=="__main__":
     run(1280,720,True); run(1920,1080,False); banner_check()
     report=dict(resolutions=[[1280,720],[1920,1080]],keepSave=True,deleteOnlyCampaign=True,
-        overlayBlocksButtons=True,cancelledClick=True,quit=True,singleLogTruncated=True,pendingButtonBanner=True,castleCameraBounds=True)
+        overlayBlocksButtons=True,cancelledClick=True,quit=True,singleLogTruncated=True,pendingButtonBanner=True,castleCameraBounds=True,musicContinuity=True)
     (OUT/"checks.json").write_text(json.dumps(report,indent=2)+"\n"); print(report)

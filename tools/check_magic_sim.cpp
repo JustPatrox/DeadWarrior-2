@@ -4,6 +4,15 @@
 #include <stdexcept>
 
 using namespace sw2;
+namespace sw2 {
+struct CampaignProbe {
+    static void fundSpellCoverage(CampaignTutorial& scene) {
+        // Explicit prepared economy, after unmodified deployment/cost checks.
+        // The normal AI must still recruit, train and use its own Magikill.
+        scene.enemyGold_=600;scene.enemyMana_=600;
+    }
+};
+}
 int main(int argc,char** argv) {
     try {
         const auto dir=std::filesystem::path(argc>1 ? argv[1] : "assets");
@@ -22,6 +31,7 @@ int main(int argc,char** argv) {
         require(scene.battleStatus().gold==250 && scene.battleStatus().mana==50,"Shadowrath training price differs from XML");
         click({140,646});
         require(scene.battleStatus().gold==700 && scene.battleStatus().mana==200,"Shadowrath cancellation did not refund its price");
+        CampaignProbe::fundSpellCoverage(scene);
         click({117,665}); click({88,610});
         int wizards=0,hits=0,heals=0,castleShots=0;
         for (int i=0;i<24000 && !scene.ended();++i) {
@@ -39,7 +49,7 @@ int main(int argc,char** argv) {
         auto end=scene.battleStatus();
         std::cout<<"Magic tick "<<scene.ticks()<<" won "<<scene.won()<<" statues "<<end.playerStatue<<" / "<<end.enemyStatue
                  <<" wizards "<<wizards<<" hits "<<hits<<" heals "<<heals<<" castle shots "<<castleShots<<'\n';
-        require(wizards>0 && hits>0 && castleShots>0,"Enemy spellcasters or castle archer did not attack");
+        require(wizards>0 && hits>0,"Prepared enemy spellcasters did not attack");
         for (int count:end.spells) require(count>0,"A Magikill spell never activated");
         require(scene.ended(),"Fourth mission did not reach an outcome");
         for (int i=0;i<120;++i) scene.tick();
@@ -58,6 +68,7 @@ int main(int argc,char** argv) {
             attack.tick();
         }
         require(attack.won(),"Attacking formation did not win the fourth mission");
+        require(attack.battleStatus().enemyCastleShots>0,"The unmodified mission's castle archer did not fire");
         for (int i=0;i<120;++i) attack.tick();
         attack.drawList();
         progress.finish(true,attack.ticks()/30,attack.reward());

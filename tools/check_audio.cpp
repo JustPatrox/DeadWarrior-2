@@ -50,6 +50,10 @@ int main(int argc,char** argv) {
         float menuPeak=0;
         for (int i=0;i<50;++i) {Sleep(20); menuPeak=std::max(menuPeak,ownPeak());}
         if (menuPeak<=.04) throw std::runtime_error("Main-menu music alone remained inaudible");
+        const auto musicPosition=audio.musicSamplesPlayed();
+        audio.music("loginMusic");
+        if(!musicPosition||audio.musicSamplesPlayed()<musicPosition||audio.submitted()!=1)
+            throw std::runtime_error("Requesting the current track reset its playhead");
         std::cout<<"Main-menu music-only process peak "<<menuPeak<<'\n';
         audio.narration(root/"tutorial/voiceTutorial1.wav");
         audio.effect("CommandMove1",0,false);

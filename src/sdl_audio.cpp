@@ -49,7 +49,12 @@ void SdlAudio::effect(const std::string& name,double pan,bool spatial) {
 void SdlAudio::music(const std::string& name) {
     auto found=sounds_.find(name);
     if(found==sounds_.end()) {report_("AUDIO MISSING music="+name);return;}
+    {
+        std::lock_guard lock(mutex_);
+        if(currentMusic_==name && std::any_of(voices_.begin(),voices_.end(),[](const Voice& v){return v.music&&v.loop;}))return;
+    }
     play(load(found->second.first),.2f*found->second.second,0,false,true,true);
+    {std::lock_guard lock(mutex_);currentMusic_=name;}
     report_("AUDIO music="+name);
 }
 void SdlAudio::narration(const std::filesystem::path& path) {
@@ -57,9 +62,14 @@ void SdlAudio::narration(const std::filesystem::path& path) {
     play(load(path),found==sounds_.end() ? 1.f : found->second.second,0,true,false,false);
 }
 void SdlAudio::stopNarration() {std::lock_guard lock(mutex_);std::erase_if(voices_,[](const Voice& v){return v.narration;});}
-void SdlAudio::stopMusic() {std::lock_guard lock(mutex_);std::erase_if(voices_,[](const Voice& v){return v.music;});}
+void SdlAudio::stopMusic() {std::lock_guard lock(mutex_);std::erase_if(voices_,[](const Voice& v){return v.music;});currentMusic_.clear();}
 void SdlAudio::paused(bool value) {std::lock_guard lock(mutex_);paused_=value;}
 void SdlAudio::channels(bool sound,bool music) {std::lock_guard lock(mutex_);sound_=sound;music_=music;}
+size_t SdlAudio::musicSamplesPlayed() {
+    std::lock_guard lock(mutex_);
+    const auto v=std::find_if(voices_.begin(),voices_.end(),[](const Voice& v){return v.music;});
+    return v==voices_.end()?0:v->cursor;
+}
 void SdlAudio::callback(void* context,SDL_AudioStream* stream,int additional,int) {
     auto& self=*static_cast<SdlAudio*>(context);
     if(additional<=0) return;
@@ -95,6 +105,13 @@ bool SdlAudio::testMix() {
     }
     music("loginMusic");effect("clickButton",0,false);
     SDL_Delay(100);
+    size_t before=0;
+    {std::lock_guard lock(mutex_);for(const auto& v:voices_)if(v.music)before=v.cursor;}
+    music("loginMusic");
+    {std::lock_guard lock(mutex_);
+        const auto v=std::find_if(voices_.begin(),voices_.end(),[](const Voice& v){return v.music;});
+        if(v==voices_.end()||!before||v->cursor<before)return false;
+    }
     return stream_ && nonzero;
 }
 }

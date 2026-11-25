@@ -67,7 +67,7 @@ void MenuAssets::loadPlacements(const std::filesystem::path& dir) {
 MenuAssets::MenuAssets(const std::filesystem::path& dir) {
     loadTextures(dir);
     loadPlacements(dir);
-    for(const char* folder:{"interface","tooltips","castle","pc-button","toolbar"}) {
+    for(const char* folder:{"interface","tooltips","castle","pc-button","toolbar","tactical"}) {
         const auto extra=dir.parent_path()/folder;
         if(std::filesystem::exists(extra/"textures.tsv")) loadTextures(extra);
     }

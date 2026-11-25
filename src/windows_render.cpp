@@ -216,7 +216,7 @@ struct HardwareRenderer::Device {
         int next=d.frame;
         for(int i=0;i<8;++i) {
             auto found=assets.art.find({d.symbol,++next});
-            if(found==assets.art.end()) {next=1;found=assets.art.find({d.symbol,next});}
+            if(found==assets.art.end()) {next=d.frame>=50001 ? 50001 : 1;found=assets.art.find({d.symbol,next});}
             if(found==assets.art.end())break;
             TextureKey key{found->second.file,d.redOffset};
             if(!textures.contains(key))prefetch.request(std::move(key));

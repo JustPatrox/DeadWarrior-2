@@ -1,5 +1,6 @@
 """Play CampaignDeads through the real Windows input, render and save paths."""
 import argparse
+import csv
 import json
 import os
 from pathlib import Path
@@ -20,8 +21,8 @@ COLUMNS=("step tick camera cursorX cursorY gold garrisoned research castleShots 
          "bankQ barracksQ archerQ magicQ templeQ siegeQ deadX deadY mana fighters").split()
 
 
-def run(width,height):
-    out=ROOT/'evidence/windows-deads';out.mkdir(parents=True,exist_ok=True)
+def run(width,height,initial_only=False):
+    out=Path(os.environ.get('DW2_TEST_EVIDENCE',ROOT/'evidence/windows-deads'));out.mkdir(parents=True,exist_ok=True)
     prefix=f'{width}x{height}';trace=out/f'{prefix}-steps.tsv';capture=out/f'{prefix}-capture.png'
     trace.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory() as temporary:
@@ -52,6 +53,11 @@ def run(width,height):
                 def space():
                     user.SendMessageW(hwnd,0x100,32,0);user.SendMessageW(hwnd,0x101,32,0)
 
+                def units():
+                    user.SendMessageW(hwnd,0x8000+26,0,0)
+                    with capture.with_suffix('.units.tsv').open() as source:
+                        return list(csv.DictReader(source,delimiter='\t'))
+
                 def row():
                     lines=trace.read_text(encoding='utf-8').splitlines() if trace.exists() else []
                     if not lines:return {}
@@ -78,10 +84,20 @@ def run(width,height):
                 # The first trace is after update 1, including the original
                 # Passive Income I payment (5 gold and int(3.5) mana).
                 assert initial['enemyDeads']==1 and initial['population']==9 and initial['gold']==705 and initial['mana']==203,initial
-                # Select the third starting Miner before the first formation
-                # has moved; keep one praying while the new workers mine.
-                click(100,380)
+                # Read an actual starting worker: a fixed point can miss the
+                # moving formation while a larger client finishes loading.
+                # Prefer the back rows: the front worker overlaps the larger
+                # Swordwrath collider, and a single click correctly picks him.
+                worker=min((u for u in units() if u['symbol']=='3104' and u['enemy']=='0' and float(u['health'])>0),key=lambda u:float(u['y']))
+                click(float(worker['x'])-initial['camera'],320+float(worker['y'])-18)
+                wait(lambda s:sum(u['selected']=='1' and u['symbol']=='3104' for u in units())==1)
                 send(0x204,500,320,2);send(0x205,500,320)
+                wait(lambda s:any(u['symbol']=='3104' and u['enemy']=='0' and u['resource']=='-1' for u in units()))
+                if initial_only:
+                    shot('prayer-verified')
+                    user.PostMessageW(hwnd,0x10,0,0);assert process.wait(timeout=8)==0
+                    print('Starting worker selection and prayer verified',width,height,flush=True)
+                    return
                 space();wait(lambda s:s.get('selectedMilitary')==1)
                 shot('entry')
                 click(350,660);wait(lambda s:s.get('garrisoned')==4);shot('miners-garrisoned')
@@ -89,19 +105,18 @@ def run(width,height):
                 click(310,600);time.sleep(2.6);current=row();assert current['camera']<=201,current
                 click(550-current['camera'],300);click(675,606);wait(lambda s:s.get('research',-1)>=0)
                 click(30,610);click(30,610);click(554,582);wait(lambda s:s.get('fast')==1)
-                next_army=next_cast=previous=0;last_tick=-1;cure=False;seen=set()
+                next_army=next_cast=previous=0;last_tick=-1;seen=set()
                 deadline=time.monotonic()+650
                 while time.monotonic()<deadline:
+                    if process.poll() is not None:raise AssertionError(f'Native process exited: {process.returncode}')
                     current=row()
                     if current['step'] in (28,29):break
                     tick=int(current['tick'])
                     if tick==last_tick:time.sleep(.08);continue
                     last_tick=tick
-                    if not cure and current['alliedHealers']>0:
-                        space();click(742,606);send(0x204,425,300,2);send(0x205,425,300);cure=True
                     if tick>=next_army:
                         next_army=tick+120
-                        click(500 if current['alliedWizards']>0 or current['alliedGiants']>=2 else 425,634)
+                        click(500 if current['alliedWizards']>=2 or current['alliedGiants']>=2 else 425,634)
                         if current['alliedWizards']>0:space();time.sleep(.02);space()
                     gold,mana=current['gold'],current['mana']
                     swords=current['fighters']-current['alliedHealers']-current['alliedWizards']-current['alliedGiants']-current['archers']
@@ -135,7 +150,7 @@ def run(width,height):
                 record=save.read_text(encoding='utf-8').splitlines();assert record[1].split()[:2]==['9','3'],record[:2]
                 report=dict(resolution=[width,height],victory=True,victoryTick=int(current['tick']),
                     gutsShots=int(current['gutsShots']),poisonHits=int(current['poisonHits']),cures=int(current['cures']),
-                    spells=[int(current[k]) for k in ('nuke','electric','poison')],minersOnlyGarrison=True,
+                    spells=[int(current[k]) for k in ('nuke','electric','poison')],minersOnlyGarrison=True,initialPrayingMinerVerified=True,
                     savedLevel=9,nextMapFrame=510,magentaPixels=0)
                 (out/f'{prefix}-checks.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8',newline='\n')
                 user.PostMessageW(hwnd,0x10,0,0);assert process.wait(timeout=8)==0
@@ -147,5 +162,5 @@ def run(width,height):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('width',type=int);parser.add_argument('height',type=int)
-    args=parser.parse_args();run(args.width,args.height)
+    parser=argparse.ArgumentParser();parser.add_argument('width',type=int);parser.add_argument('height',type=int);parser.add_argument('--initial-only',action='store_true')
+    args=parser.parse_args();run(args.width,args.height,args.initial_only)

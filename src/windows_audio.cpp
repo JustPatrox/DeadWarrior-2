@@ -103,6 +103,8 @@ void WindowsAudio::narration(const std::filesystem::path& path) {
     play(load(path),gain,0,true);
 }
 void WindowsAudio::music(const std::string& name,bool loop) {
+    // SoundManager.playSoundInBackground keeps the current track's playhead.
+    if(currentMusic_==name && musicLoop_==loop && musicPlaying())return;
     stopMusic();
     if (!ready()) return;
     auto sound=sounds_.find(name);
@@ -116,11 +118,13 @@ void WindowsAudio::music(const std::string& name,bool loop) {
     musicVolume_=.2f*sound->second.second;
     music_->SetVolume(musicEnabled_ ? musicVolume_ : 0.f);
     if (FAILED(music_->SubmitSourceBuffer(&buffer)) || FAILED(music_->Start())) {report("AUDIO ERROR music playback="+name); stopMusic(); return;}
+    currentMusic_=name;musicLoop_=loop;
     report("AUDIO music="+name+" loop="+std::to_string(loop)+" gain="+std::to_string(.2f*sound->second.second));
     ++submitted_;
 }
 void WindowsAudio::stopMusic() {
     if (music_) {music_->DestroyVoice(); music_=nullptr;}
+    currentMusic_.clear();
 }
 void WindowsAudio::stopNarration() {
     for (auto& voice:voices_) if (voice.source && voice.narration) {
@@ -174,5 +178,10 @@ bool WindowsAudio::musicPlaying() const {
     if (!music_) return false;
     XAUDIO2_VOICE_STATE state{}; music_->GetState(&state,XAUDIO2_VOICE_NOSAMPLESPLAYED);
     return state.BuffersQueued!=0;
+}
+unsigned long long WindowsAudio::musicSamplesPlayed() const {
+    if(!music_)return 0;
+    XAUDIO2_VOICE_STATE state{};music_->GetState(&state);
+    return state.SamplesPlayed;
 }
 }

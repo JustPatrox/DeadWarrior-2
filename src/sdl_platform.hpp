@@ -54,6 +54,7 @@ class SdlAudio {
     std::mutex mutex_;
     SDL_AudioStream* stream_{};
     bool sound_{true},music_{true},paused_{};
+    std::string currentMusic_;
     Clip& load(const std::filesystem::path&);
     void play(Clip&,float,float,bool,bool,bool);
     static void callback(void*,SDL_AudioStream*,int,int);
@@ -69,6 +70,7 @@ public:
     void channels(bool sound,bool music);
     bool soundEnabled() const {return sound_;}
     bool musicEnabled() const {return music_;}
+    size_t musicSamplesPlayed();
     bool testMix();
 };
 

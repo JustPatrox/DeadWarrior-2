@@ -26,6 +26,7 @@ bool CampaignTutorial::actionEnabled(int slot) const {
     if(selected==units_.end()) return false;
     if(slot==6 || slot>=7) return true;
     if(slot==1) return (mission_ && upgrades_[2] && selected->symbol==sword) ||
+        (mission_ && upgrades_[4] && selected->symbol==spearton) ||
         (mission_>=3 && selected->symbol==ninja) || (mission_>=4 && (selected->symbol==wizard || selected->symbol==healer));
     if(slot==2) return mission_>=4 && ((selected->symbol==wizard && upgrades_[17]) || (selected->symbol==healer && upgrades_[8]));
     return slot==3 && mission_>=4 && selected->symbol==wizard && upgrades_[13];

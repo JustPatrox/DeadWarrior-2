@@ -41,6 +41,7 @@ STEPS = (
     ("build_wip_assets.py",),
     ("build_pause_assets.py",),
     ("refresh_actor_loadouts.py",),
+    ("build_tactical_assets.py",),
 )
 
 

@@ -56,8 +56,14 @@ void CampaignIntermission::enterMap() {
 }
 int CampaignIntermission::nodeFrame(int index) const {
     if (campaign_.upgrades[index]) return 3;
-    const int parent=nodes_[index].parent;
-    return !parent || campaign_.upgrades[parent] ? 2 : 1;
+    int parent=nodes_[index].parent;
+    // Also protect older/inconsistent saves that contain a child without its
+    // own prerequisites; buying its descendants must not bypass the root.
+    for(int depth=0;parent && depth<CampaignProgress::upgradeCount;++depth) {
+        if(!campaign_.upgrades[parent])return 1;
+        parent=nodes_[parent].parent;
+    }
+    return parent ? 1 : 2;
 }
 CampaignIntermission::Element CampaignIntermission::element(int id,Point origin,double scale,int frame) const {
     const auto& b=art_.texture(id,frame).bounds;

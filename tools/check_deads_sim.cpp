@@ -24,10 +24,9 @@ int main(int argc,char** argv) {
         click({550-scene.camera(),300});click({675,606});
         require(scene.defenceStatus().researchTicks>=0,"Castle research unavailable");
         click({30,610});click({30,610});
-        bool hint=false,cureEnabled=false;int maxDeads=1,maxGiants=0,hintDuration=0;
+        bool hint=false;int maxDeads=1,maxGiants=0,hintDuration=0;
         for(int i=0;i<26000&&!scene.ended();++i) {
             state=scene.battleStatus();
-            if(!cureEnabled&&state.alliedHealers>0) {scene.selectArmy();scene.unitAbility(1);cureEnabled=true;}
             if(i%120==0) {
                 if(state.miners+state.queued[0]<10) click({30,610});
                 state=scene.battleStatus();
@@ -39,7 +38,9 @@ int main(int argc,char** argv) {
                 if(swords+state.queued[1]<6&&state.gold>=100) click({88,610});
                 state=scene.battleStatus();
                 if(state.miners>=10&&state.gold>=1500&&state.enslavedGiants+state.queued[5]<2) click({230,665});
-                click({state.alliedWizards>0||state.enslavedGiants>=2 ? 500. : 425.,634});
+                // Assemble the full support group before exposing a lone
+                // caster to the poisoned ranged line.
+                click({state.alliedWizards>=2||state.enslavedGiants>=2 ? 500. : 425.,634});
                 if(state.alliedWizards>0) scene.selectArmy(true);
             }
             scene.tick();state=scene.battleStatus();

@@ -43,7 +43,7 @@ This project is not affiliated with Max Games or the original game's creators. S
 | Windowed, borderless window, and fullscreen modes | Insert on Windows/Linux; Option on macOS |
 | 30 / 60 / 120 / 240 FPS or unlimited | Available |
 | V-Sync, FPS counter, render resolution, and cursor lock | Available |
-| Aspect modes | 16:9 default, Stretched, Dynamic [Experimental] |
+| Aspect modes | Dynamic [Experimental] default; fixed 16:9 and Stretched available |
 | Castle hover, tooltips, and PC toolbar button | Original artwork, font, hit areas, and animation states |
 | Original toolbar hover and pressed states | Implemented, including action-slot glow |
 | Original campaign pause menu | MENU, Esc, or P |
@@ -102,6 +102,8 @@ See the [preview.6 fixes and validation](docs/todo-checkpoint.md) for the comple
 The [Dynamic menu and unit separation fix](docs/desktop-ai-fix.md) documents portrait menu anchors and repulsion translated from the original.
 
 The [selection, enemy response and Castle Archer correction](docs/input-castle-fix.md) restores uninterrupted enemy attacks and all three campaign castle research tiers.
+
+The [tactical command and center-tower corrections](docs/tactical-fixes.md) cover Meric movement, Giant commands, original Block, tower capture and ghost spawns, upgrade roots, and uninterrupted WIP music.
 
 ## Reporting a problem
 

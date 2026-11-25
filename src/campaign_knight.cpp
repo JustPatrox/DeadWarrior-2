@@ -12,7 +12,7 @@ void CampaignTutorial::selectArmy(bool center) {
     if (ended() || cinematic_>=0) return;
     rangeSelected_=false;selectedBuilding_=0;aimedSpell_=0;aimedAttackMove_=false;
     for (auto& unit:units_)
-        unit.selected=!unit.enemy && unit.hp>0 && !isWorker(unit.symbol) && !unit.garrisoned;
+        unit.selected=!unit.enemy && !unit.towerSpawned && unit.hp>0 && !isWorker(unit.symbol) && !unit.garrisoned;
     if (center && frontLine()>0) targetCamera_=frontLine()-legacyWidth/2;
 }
 void CampaignTutorial::minerOrder(bool garrison) {

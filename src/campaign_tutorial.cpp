@@ -25,6 +25,13 @@ CampaignTutorial::CampaignTutorial(const MenuAssets& art,const std::filesystem::
     Animation pose;
     int owner{};
     while (poses>>owner>>key>>pose.symbol>>pose.origin.x>>pose.origin.y>>pose.length) animations_[{owner,key}]=pose;
+    const auto tactical=dir.parent_path()/"tactical";
+    if(std::filesystem::exists(tactical/"rules.tsv")) {
+        std::ifstream extraRules(tactical/"rules.tsv"),extraPoses(tactical/"animations.tsv");
+        while(extraRules>>key>>value)rules_[key]=value;
+        while(extraPoses>>owner>>key>>pose.symbol>>pose.origin.x>>pose.origin.y>>pose.length>>pose.frameBase)animations_[{owner,key}]=pose;
+        if(!extraRules.eof()||!extraPoses.eof())throw std::runtime_error("Invalid tactical manifest");
+    }
     for (std::string line;std::getline(messages,line);) {
         std::istringstream fields(line);
         std::string voice,seconds;
@@ -223,7 +230,7 @@ void CampaignTutorial::updateUnit(Unit& u) {
     if (u.hp>0 && (u.position.x-home)*(u.enemy ? -1 : 1)<-25) {
         u.poison=0;u.hp=std::min(u.maxHp,u.hp+rules_.at("garrisonHealRate"));
     }
-    if (u.poison>0 && ticks_%90==0) applyMagicDamage(u,u.poison,!u.enemy);
+    if (u.poison>0 && ticks_%90==0) applyMagicDamage(u,u.poison,!u.enemy,false);
     if (u.hp>0 && u.healTicks>0) {u.hp=std::min(u.maxHp,u.hp+u.healAmount); --u.healTicks;}
     if (u.cloakTicks>0) --u.cloakTicks;
     if (u.cloakCooldown>0) --u.cloakCooldown;
@@ -232,13 +239,13 @@ void CampaignTutorial::updateUnit(Unit& u) {
     if (u.hp<=0) {
         if (u.symbol==bomber) {
             if (!u.deadCounted) {
-                (u.enemy ? enemyPopulation_ : population_)-=int(stat(u,"population"));
+                if(!u.towerSpawned)(u.enemy ? enemyPopulation_ : population_)-=int(stat(u,"population"));
                 u.deadCounted=true;detonate(u);
             }
             return;
         }
         if (!u.deadCounted) {
-            (u.enemy ? enemyPopulation_ : population_)-=int(stat(u,"population")); u.deadCounted=true;
+            if(!u.towerSpawned)(u.enemy ? enemyPopulation_ : population_)-=int(stat(u,"population")); u.deadCounted=true;
             sound(u.symbol==crawler ? "CrawlerDeath"+std::to_string(1+soundSequence_++%3) :
                   u.symbol==wizard ? "MagikillDeath" : "Pain"+std::to_string(1+soundSequence_++%8),u.position);
         }
@@ -250,10 +257,17 @@ void CampaignTutorial::updateUnit(Unit& u) {
         return;
     }
     finishMove(u);
+    if(!u.inBlock && u.pose=="block")animate(u,"stand");
+    // SpeartonAi retains Block only for STAND; HOLD is a separate original
+    // command even though the native representation shares Order::Stand.
+    if(u.inBlock && (u.order!=Order::Stand || u.hold))u.blocking=false;
+    const bool block=u.inBlock;
     Point force{};
     const bool casting=u.canFight && (u.spell || !u.stunned) && (u.symbol==wizard || u.symbol==healer) && updateCaster(u);
-    bool attacking=!casting && u.pose.starts_with("attack_");
-    if (casting) {
+    bool attacking=!block && !casting && u.pose.starts_with("attack_");
+    if(block) {
+        animate(u,"block");
+    } else if (casting) {
         // The cast animation advances below and retains its authored event frame.
     } else if (u.symbol==archer) {
         force=updateArcher(u);
@@ -280,12 +294,15 @@ void CampaignTutorial::updateUnit(Unit& u) {
                 if (u.symbol==ninja) sound("ninjaSwipe"+std::to_string(1+soundSequence_++%4),u.position);
                 else if (u.symbol==sword || u.symbol==spearton || isWorker(u.symbol)) sound("swordwrathSwing1",u.position);
                 attacking=true;
-            } else if (!u.hold) {
+            } else if (!u.hold && (u.symbol!=healer || u.enemy || dx*dx+dy*dy>50000)) {
                 u.facing=facing;
                 if (u.symbol==bomber && dx*dx+dy*dy<150000) force={dx/30,dy};
                 else {
                     force.x=std::abs(dx)<reach*.9 ? 0 : (dx-facing*reach*.5)/100;
-                    if (std::abs(dx)<200) force.y=dy;
+                    // Original non-mage UnitAi stops lateral convergence once
+                    // within the forty-unit attack lane. Casters differ.
+                    if (std::abs(dx)<200 && enemy.symbol!=1174 &&
+                        ((u.symbol==wizard || u.symbol==healer) || std::abs(dy)>=40)) force.y=dy;
                 }
             }
         }
@@ -338,15 +355,15 @@ void CampaignTutorial::updateUnit(Unit& u) {
                     u.cloakTicks=0;
                 }
                 if (mission_>=3) applyMagicDamage(target,damage,u.enemy);
-                else target.hp=std::max(0.,target.hp-damage/modifier);
+                else target.hp=std::max(0.,target.hp-damage/modifier*(target.inBlock ? 1-rules_.at("spearton.shieldWall.damageReduction") : 1));
                 impactSound(target);
                 if (u.symbol==knight || u.symbol==crawler) sound("sword1",u.position);
                 u.hit=true;
             }
         }
         if (u.frame>=seq.length) animate(u,"run");
-    } else if (!casting && (std::abs(force.x)>.03 || std::abs(force.y)>.03)) animate(u,u.cloakTicks ? "stealth" : "run");
-    else if (!casting && (u.pose=="run" || u.pose=="stealth")) animate(u,u.symbol==sword && random()*4.656612875245797e-10>=.1 ? "stand_breath" : "stand");
+    } else if (!casting && !block && (std::abs(force.x)>.03 || std::abs(force.y)>.03)) animate(u,u.cloakTicks ? "stealth" : "run");
+    else if (!casting && !block && (u.pose=="run" || u.pose=="stealth")) animate(u,u.symbol==sword && random()*4.656612875245797e-10>=.1 ? "stand_breath" : "stand");
     const double drag=u.stunned ? .7 : stat(u,"dragForce");
     double limit=mission_ && u.symbol==sword && u.rageCounter<rules_.at("rage.effect") ?
         rules_.at("rage.rageMaxVelocity") : stat(u,u.cloakTicks ? "stealth.maxVelocity" : "maxVelocity");
@@ -365,6 +382,11 @@ void CampaignTutorial::updateUnit(Unit& u) {
        u.order==Order::Move && std::hypot(u.goal.x-u.position.x,u.goal.y-u.position.y)<40) assignFreeMine(u);
     if(u.idleFacing && !casting && !attacking && u.order==Order::Stand && std::hypot(u.velocity.x,u.velocity.y)<.3) u.facing=u.idleFacing;
     const int end=animations_.at({u.symbol,u.pose}).length;
+    if(block) {
+        if(u.blocking)u.frame=std::min(15,u.frame+1);
+        else if(++u.frame>=end) {u.inBlock=false;u.frame=2;}
+        return;
+    }
     u.frame=u.frame>=end ? 2 : u.frame+1;
     if (mission_ && u.symbol==sword && attacking && u.rageCounter<rules_.at("rage.effect"))
         u.frame=std::min(end,u.frame+1);
@@ -455,10 +477,14 @@ void CampaignTutorial::moveFormation(const std::vector<Unit*>& group,Point p,boo
         if(u.enemy && u.pose.starts_with("attack_"))continue;
         // UnitAi.setCommand preserves an existing attack when replacing an
         // ATTACK_MOVE with another ATTACK_MOVE. Keep the new formation goal.
-        if (keepCombat && (u.spell || (u.engageOnMove && u.order==Order::Attack &&
+        // Monk.stateFixForCutToWalk preserves the cast, but setCommand still
+        // replaces its command. Queue this new movement while the heal finishes.
+        if (keepCombat && !(u.symbol==healer && u.spell) && (u.spell || (u.engageOnMove && u.order==Order::Attack &&
             u.target!=-1 && combatTarget(u.target).hp>0))) {u.hold=false;continue;}
         u.order=Order::Move; u.target=-1; u.hold=false;
-        if (u.pose.starts_with("attack_")) animate(u,"run");
+        // Monk.stateFixForCutToWalk keeps a live heal/cure. Its authored
+        // animation must finish before the pending movement can begin.
+        if (u.pose.starts_with("attack_") && !(u.symbol==healer && u.spell)) animate(u,"run");
     }
 }
 void CampaignTutorial::point(std::optional<Point> p) {
@@ -572,7 +598,7 @@ int CampaignTutorial::selectionHit(Point p) const {
     int hit=-1;
     for(int i=0;i<int(units_.size());++i) {
         const auto& u=units_[i];
-        if(u.enemy || u.hp<=0)continue;
+        if(u.enemy || u.towerSpawned || u.hp<=0)continue;
         const double size=scale(u),x=u.position.x-camera_;
         const double y=battlefieldY_+u.position.y-u.altitude*size;
         if(std::abs(p.x-x)<u.width*size/2 && p.y>y-u.height*size && p.y<=y &&
@@ -595,7 +621,7 @@ void CampaignTutorial::updateSelection(Point point) {
     const auto box=between(*dragStart_,point);
     for (auto& u:units_) {
         const double x=u.position.x-camera_,y=battlefieldY_+u.position.y,h=u.height*scale(u);
-        u.selected=!u.enemy && u.hp>0 && x>box.x && x<box.x+box.w && box.y<y && y-h/2<box.y+box.h;
+        u.selected=!u.enemy && !u.towerSpawned && u.hp>0 && x>box.x && x<box.x+box.w && box.y<y && y-h/2<box.y+box.h;
     }
 }
 void CampaignTutorial::command(Point p) {
@@ -618,7 +644,7 @@ void CampaignTutorial::command(Point p) {
     sound("CommandMove"+std::to_string(1+soundSequence_++%6),{},false);
     if (target.kind==CommandTarget::Enemy) {
         for (auto& u:units_) if (u.selected && u.hp>0 && !u.enemy) {
-            u.garrisoned=false; u.engageOnMove=false;u.idleFacing=0; u.target=target.id; u.order=Order::Attack;
+            u.garrisoned=false; u.engageOnMove=false;u.idleFacing=0; u.hold=false; u.target=target.id; u.order=Order::Attack;
         }
         return;
     }
@@ -832,7 +858,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         else {
             // Unit.updateMotion applies flyingHeight to _perspectiveScale,
             // which already contains the unit's own scale (Medusa is 1.2).
-            auto character=sprite(seq.symbol,u.frame+seq.frameBase,{x+u.facing*seq.origin.x*size,y-u.altitude*size+seq.origin.y*size},size,u.facing<0);
+            auto character=sprite(seq.symbol,u.frame+seq.frameBase+(u.towerSpawned ? 50000 : 0),{x+u.facing*seq.origin.x*size,y-u.altitude*size+seq.origin.y*size},size,u.facing<0);
             character.redOffset=u.tint>=0 ? u.tint : u.enemy ? 75 : 0;
             if (u.symbol==ninja && u.pose=="run") {
                 for (int copy:{2,1}) {
@@ -857,13 +883,7 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         }
     }
     if (mission_) {
-        const double towerSize=(rules_.at("backScale")+rules_.at("frontScale"))/2;
-        const Point tower{length_/2-camera_,battlefieldY_+depth_/2};
-        layers.emplace_back(depth_/2,sprite(1162,1,tower,towerSize));
-        auto flame=sprite(1158,1+ticks_%int(rules_.at("hill.flameFrames")),
-            {tower.x+2.5*towerSize,tower.y-10.3*towerSize},towerSize);
-        flame.alpha=std::abs(towerControl_-50)/50; flame.redOffset=towerControl_>50 ? 255 : 0;
-        layers.emplace_back(depth_/2,std::move(flame));
+        drawHill(layers);
         if (wall_.hp>0) for (int i=0;i<5;++i) {
             const double y=i*depth_/5,size=rules_.at("backScale")+y/depth_*(rules_.at("frontScale")-rules_.at("backScale"));
             layers.emplace_back(y,sprite(1174,int(rules_.at("wall.frame")),{wall_.position.x-camera_,battlefieldY_+y},size));
@@ -945,6 +965,11 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         out.push_back(sprite(6458,1,{744,679.5}));
         out.push_back(sprite(selected->garrisoned ? 8780 : 8808,1,{675,678}));
         if (mission_ && upgrades_[2] && selected->symbol==sword) out.push_back(sprite(8788,1,{675,606}));
+        if (mission_ && upgrades_[4] && selected->symbol==spearton) {
+            out.push_back(sprite(8806,1,{675,606}));
+            // ActionInterface.drawToggle: int width=70, height=32, circle r=6.
+            out.push_back(Draw::shape(Draw::Kind::Ellipse,{686.5,592,12,12},selected->blocking ? 0x00ff00 : 0xff0000,.8));
+        }
         if (mission_>=3 && selected->symbol==ninja) out.push_back(sprite(8807,1,{675,606}));
         if (mission_>=4 && selected->symbol==wizard) {
             out.push_back(sprite(8791,1,{675,606}));
@@ -953,7 +978,11 @@ std::vector<Draw> CampaignTutorial::drawList() const {
         }
         if (mission_>=4 && selected->symbol==healer) {
             out.push_back(sprite(8787,1,{675,606}));
-            if (upgrades_[8]) out.push_back(sprite(8783,1,{744,606}));
+            out.push_back(Draw::shape(Draw::Kind::Ellipse,{686.5,592,12,12},selected->autoHeal ? 0x00ff00 : 0xff0000,.8));
+            if (upgrades_[8]) {
+                out.push_back(sprite(8783,1,{744,606}));
+                out.push_back(Draw::shape(Draw::Kind::Ellipse,{755.5,590.5,12,12},selected->autoCure ? 0x00ff00 : 0xff0000,.8));
+            }
         }
     }
     for(size_t i=hudStart;i<out.size();++i) out[i].target.y+=Viewport::height-700;

@@ -15,7 +15,7 @@ CampaignTutorial::DefenceStatus CampaignTutorial::defenceStatus() const {
 }
 double CampaignTutorial::frontLine() const {
     double front=0;
-    for (const auto& u:units_) if (!u.enemy && u.hp>0) front=std::max(front,u.position.x);
+    for (const auto& u:units_) if (!u.enemy && !u.towerSpawned && u.hp>0) front=std::max(front,u.position.x);
     return front;
 }
 bool CampaignTutorial::hitControl(const char* name,Point p) const {

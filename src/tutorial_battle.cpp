@@ -253,7 +253,7 @@ void CampaignTutorial::orderArmy(bool enemy,ArmyOrder order,double destination) 
     if (!enemy) sound(order==ArmyOrder::Garrison ? "GarrisonEnter" : order==ArmyOrder::Defend ? "GarrisonExit" : "CommandMove1",{},false);
     std::vector<Unit*> formation,retreating;
     for (auto& u:units_) {
-        if (u.enemy!=enemy || u.hp<=0) continue;
+        if (u.enemy!=enemy || u.towerSpawned || u.hp<=0) continue;
         u.idleFacing=!enemy && order==ArmyOrder::Defend && !isWorker(u.symbol) ? 1 : 0;
         u.garrisoned=order==ArmyOrder::Garrison;
         if (!u.garrisoned && isWorker(u.symbol)) {
@@ -393,7 +393,7 @@ void CampaignTutorial::simulateActors(bool strategy) {
         // fractional XML mana awards truncate separately on each payment.
         mana_+=int(rules_.at(suffix.empty() ? "passiveMana" : "passiveManaUpgraded"+suffix));
     }
-    if (step_>=Step::Commands) updateBattle(strategy);
+    if (step_>=Step::Commands) updateBattle(strategy && !diagnosticFixture_);
     updateCastleResearch(); // Tech.update advances once per simulation step, including fast forward.
     for (auto& u:units_) updateUnit(u);
     if (enemyCastleResearchTicks_>=0 && --enemyCastleResearchTicks_<0) enemyCastleArcher_=true;
@@ -405,6 +405,7 @@ void CampaignTutorial::simulateActors(bool strategy) {
     updateBoulders();
     if (mission_>=3) updateMagic();
     updateProduction();
+    if(mission_)updateHill();
 }
 void CampaignTutorial::updateBattle(bool strategy) {
     if (!mission_ && !reinforcement_ && statues_[1].hp<statues_[1].maxHp*.75) {
@@ -418,7 +419,7 @@ void CampaignTutorial::updateBattle(bool strategy) {
     for (auto& u:units_) {
         // UnitAi.baseUpdate checks MoveCommand.isFinished before acquiring a target.
         finishMove(u);
-        if (!u.canFight || (!u.engageOnMove && u.order!=Order::Stand) || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
+        if (!u.canFight || u.inBlock || (!u.engageOnMove && u.order!=Order::Stand) || u.garrisoned || u.hp<=0 || u.pose.starts_with("attack_")) continue;
         const auto& statue=statues_[!u.enemy];
         auto squared=[&](const Unit& target){
             const double x=target.position.x-u.position.x,y=target.position.y-u.position.y;

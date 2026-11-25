@@ -94,7 +94,7 @@ def run(width,height):
                 click(310,600);time.sleep(2.6);current=row();assert current['camera']<=201,current
                 click(550-current['camera'],300);click(675,606);wait(lambda s:s.get('research',-1)>=0)
                 click(30,610);click(30,610);click(554,582);wait(lambda s:s.get('fast')==1)
-                max_crawlers=1;next_army=next_cast=previous=0;last_tick=-1;cure=False;seen=set()
+                max_crawlers=1;next_army=next_cast=previous=0;last_tick=-1;seen=set()
                 deadline=time.monotonic()+650
                 while time.monotonic()<deadline:
                     current=row()
@@ -103,8 +103,6 @@ def run(width,height):
                     tick=int(current['tick'])
                     if tick==last_tick:time.sleep(.08);continue
                     last_tick=tick
-                    if not cure and current['alliedHealers']>0:
-                        space();click(742,606);send(0x204,425,300,2);send(0x205,425,300);cure=True
                     if tick>=next_army:
                         next_army=tick+120
                         click(500 if current['alliedWizards']>0 or current['alliedGiants']>=2 else 425,634)

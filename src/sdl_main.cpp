@@ -382,12 +382,35 @@ public:
             }
             draw(1280,720,out/("mission-"+std::to_string(level+1)+"-720.png"));draw(1920,1080,out/("mission-"+std::to_string(level+1)+"-1080.png"));
         }
+        progress_.level=8;startBattle();
+        require(battle_->prepareTacticalCheck(1),"Prepared Giant fixture unavailable");
+        battle_->command({500,420});for(int i=0;i<8;++i)tick();
+        require(battle_->unitStatus()[0].pose=="attack_1","Direct target did not replace Giant Hold");
+        require(battle_->prepareTacticalCheck(2),"Prepared Meric fixture unavailable");tick();
+        battle_->command({700,445});for(int i=0;i<130;++i)tick();
+        require(battle_->unitStatus()[0].position.x>2450&&battle_->unitStatus()[1].health>100,"Meric did not finish healing and move");
+        draw(1280,720,out/"meric-moved.png");
+        require(battle_->prepareTacticalCheck(3),"Prepared Block fixture unavailable");
+        pointer(1,Point{675,606});pointer(2,Point{675,606});for(int i=0;i<24;++i)tick();
+        require(battle_->unitStatus()[0].pose=="block"&&battle_->unitStatus()[0].frame==15,"Block did not hold its original frame");
+        draw(1280,720,out/"block-held.png");
+        for(int fixture:{4,5}) {
+            require(battle_->prepareTacticalCheck(fixture),"Prepared tower fixture unavailable");
+            for(int i=0;i<150;++i)tick();draw(1280,720,out/("tower-"+std::to_string(fixture-3)+"-progress.png"));
+            for(int i=0;i<353;++i)tick();
+            const auto units=battle_->unitStatus();
+            require(units.size()==2&&units[1].symbol==(fixture==4?6456:7526),"Captured tower did not spawn the original ghost tier");
+            battle_->selectArmy();require(!battle_->unitStatus()[1].selected,"Army selection included the uncontrolled ghost");
+            draw(1280,720,out/("tower-"+std::to_string(fixture-3)+"-ghost.png"));
+        }
         openCampaign(CampaignIntermission::Page::Upgrades);draw(1280,720,out/"upgrades.png");openCampaign(CampaignIntermission::Page::Map);for(int i=0;i<90;++i) tick();draw(1280,720,out/"map.png");
+        const auto musicBeforeWip=audio_.musicSamplesPlayed();
         progress_.level=CampaignProgress::playableLevelCount;startBattle();require(bool(wip_),"Unfinished level guard failed");draw(1280,720,out/"wip.png");
+        require(musicBeforeWip>0&&audio_.musicSamplesPlayed()>=musicBeforeWip,"WIP reset the current music playhead");
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true,\"singleClickSelection\":true,\"dragSelection\":true,\"castleArcherTiers\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true,\"singleClickSelection\":true,\"dragSelection\":true,\"castleArcherTiers\":true,\"tacticalCommands\":true,\"blockStance\":true,\"towerSpawn\":true,\"musicContinuity\":true}\n";
         log("SELF-TEST passed");
     }
 };

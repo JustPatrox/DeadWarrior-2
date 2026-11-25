@@ -1,5 +1,8 @@
 """Render the original toolBoxMc/TipBox fields, artwork and embedded fonts."""
 from math import floor
+from html import escape
+import os
+from pathlib import Path
 import re
 from xml.etree import ElementTree as ET
 from build_menu_assets import ArtCompiler, ROOT, WORK
@@ -14,7 +17,7 @@ ABILITIES={90001:'swordwrath/rage',90002:'ninja/stealth',90003:'magikill/nuke',
 
 
 def build():
-    c=ArtCompiler(ROOT/'assets/tooltips')
+    c=ArtCompiler(Path(os.environ.get('DW2_TOOLTIP_OUT',ROOT/'assets/tooltips')))
     data=ET.parse(next((WORK/'extract/binaryData').glob('10208_*'))).getroot()
     root=c.timeline(1119).getFrame(0).layers
     stats=c.timeline(1116).getFrame(0).layers
@@ -23,6 +26,14 @@ def build():
     rows=[]
     def render(key,title,info,time=0,gold=0,mana=0,population=0,hide=False,delay=4):
         set_field(c,1102,title);set_field(c,1103,info)
+        if key==90008:
+            # Preserve the original TextField's three measured lines. FFDec's
+            # automatic HTML wrap clips this particular tooltip's second line.
+            lines=(ROOT/'tools/fixtures/original-block-tooltip.txt').read_text(encoding='utf-8').splitlines()
+            assert ' '.join(lines)==info
+            field=c.swf.getCharacter(1103)
+            font=re.search(r'<font[^>]*>',str(field.initialText)).group(0)
+            field.initialText=''.join('<p align="left">'+font+escape(line.rstrip())+'</font></p>' for line in lines)
         for symbol,value in ((1106,str(gold)),(1107,str(floor(time/30+.5))+'s'),
                              (1108,str(population)),(1109,str(mana))):set_field(c,symbol,value)
         root.get(c.J('java.lang.Integer')(3)).matrix.translateY=round((421.6 if hide else 497.6)*20)
@@ -50,6 +61,7 @@ def build():
         render(key,name,originals[name],hide=True,delay=24)
     # Append to preserve every existing original tooltip frame binding.
     for tier in (2,3):xml(-tier,data.find(f'Order/Tech/castleArchers{tier}'),True)
+    xml(90008,data.find('Order/Units/spearton/shieldWall'))
     table(c.directory/'textures.tsv',c.rows)
     table(c.directory/'tooltips.tsv',rows)
     print('Original toolBoxMc variants:',len(rows),flush=True)

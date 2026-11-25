@@ -66,6 +66,9 @@ public:
         int facing{},resource{-2},miningSlot{-1},bag{},order{};Point goal;
     };
     std::vector<UnitStatus> unitStatus() const;
+    // Prepared component scenes are reachable only through explicit diagnostic
+    // capture mode in the platform clients; normal campaign setup is unchanged.
+    bool prepareTacticalCheck(int);
     struct OreStatus {Point position;int remaining{},total{};};
     std::vector<OreStatus> oreStatus() const;
     bool showingResults() const;
@@ -93,6 +96,7 @@ private:
         double perspectiveScale{1};
         int hitBoxWidth{50}; // Unit.initBase; independent of artwork/projectile bounds.
         bool mayWalkThrough{};
+        bool blocking{},inBlock{},towerSpawned{};
         Order order{Order::Stand};
         int target{-1};
         int resource{-2},miningSlot{-1},bag{};
@@ -106,7 +110,7 @@ private:
         double poison{};
         int healTicks{};
         double healAmount{};
-        bool autoHeal{true},autoCure{};
+        bool autoHeal{true},autoCure{true}; // Monk.init toggles both on.
         double bowAngle{};
         std::string pose{"stand"};
     };
@@ -189,9 +193,16 @@ private:
     double maxCrawlerDamage_{};
     std::vector<int> backgroundLayers_{4102,4098};
     double towerControl_{50};
+    int towerSpawnIndex_{-1},towerSpawnTime_{};
+    struct TowerEffect {int symbol{},tick{};Point position;double scale{1};};
+    std::vector<TowerEffect> towerEffects_;
+    void updateHill();
+    void drawHill(std::vector<std::pair<double,Draw>>&) const;
+    bool spatialAreaContains(Point center,double halfExtent,Point entity) const;
     std::bitset<CampaignProgress::upgradeCount+1> upgrades_;
     bool trainingAvailable_{};
     bool transitioning_{true},mapDown_{};
+    bool diagnosticFixture_{};
     double messageX_{-600},camera_{2200},targetCamera_{2200},length_{},depth_{},battlefieldY_{};
     std::optional<Point> cursor_,dragStart_;
     bool selectionDragging_{};
@@ -339,7 +350,7 @@ private:
     void castAt(Point);
     void updateMagic();
     void drawMagic(std::vector<std::pair<double,Draw>>&) const;
-    void applyMagicDamage(Unit&,double,bool);
+    void applyMagicDamage(Unit&,double,bool,bool hasInflictor=true);
     Draw rotatedSprite(int symbol,int frame,Point origin,double size,double angle) const;
     Draw sprite(int symbol,int frame,Point origin,double scale=1,bool mirror=false) const;
 };

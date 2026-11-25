@@ -51,10 +51,9 @@ int main(int argc,char** argv) {
         click({550-scene.camera(),300});click({675,606});
         require(scene.defenceStatus().researchTicks>=0,"Castle research unavailable");
         click({30,610});click({30,610});
-        bool hint=false,cureEnabled=false;int maxCrawlers=1,maxGiants=0,hintDuration=0;
+        bool hint=false;int maxCrawlers=1,maxGiants=0,hintDuration=0;
         for(int i=0;i<26000&&!scene.ended();++i) {
             state=scene.battleStatus();
-            if(!cureEnabled&&state.alliedHealers>0) {scene.selectArmy();scene.unitAbility(1);cureEnabled=true;}
             if(i%120==0) {
                 if(state.miners+state.queued[0]<10) click({30,610});
                 state=scene.battleStatus();

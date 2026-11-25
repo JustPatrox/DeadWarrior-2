@@ -10,7 +10,11 @@ bool CampaignTutorial::castleHit(const CastlePart& part,Point p) const {
     return mask==castleMasks_.end() ? part.hit.contains(p) : std::any_of(mask->second.begin(),mask->second.end(),[&](const Rect& row){return row.contains(p);});
 }
 double CampaignTutorial::visionBoundary() const {
-    return std::min(length_,std::max(legacyWidth,frontLine())+rules_.at("visionSize"));
+    // Team.getVisionRange uses forwardUnit, which includes uncontrolled tower
+    // units. Army centering/orders use forwardUnitNotSpawn separately.
+    double front=legacyWidth;
+    for(const auto& u:units_)if(!u.enemy&&u.hp>0)front=std::max(front,u.position.x);
+    return std::min(length_,front+rules_.at("visionSize"));
 }
 bool CampaignTutorial::visible(const Unit& unit) const {
     return !unit.enemy || cinematic_>=0 || ended() || step_==Step::Enemy || unit.position.x<=visionBoundary();
@@ -41,6 +45,7 @@ int CampaignTutorial::tooltipAt() const {
                                  std::tuple{6457,-22,Point{813,678}},std::tuple{8808,selected->garrisoned ? -24 : -23,Point{675,678}}})
             if(sprite(symbol,1,at).target.contains(*cursor_)) return key;
         if(Rect{647,582,56,48}.contains(*cursor_)) {
+            if(selected->symbol==spearton && mission_ && upgrades_[4])return 90008;
             if(selected->symbol==sword && mission_ && upgrades_[2]) return 90001;
             if(selected->symbol==ninja && mission_>=3) return 90002;
             if(selected->symbol==wizard && mission_>=4) return 90003;

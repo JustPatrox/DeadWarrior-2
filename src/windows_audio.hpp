@@ -33,6 +33,7 @@ public:
     unsigned activeVoices() const;
     bool musicPlaying() const;
     unsigned long long narrationSamplesPlayed() const;
+    unsigned long long musicSamplesPlayed() const;
 private:
     std::function<void(std::string_view)> reporter_;
     std::set<std::string> reportedMissing_;
@@ -46,6 +47,8 @@ private:
     IXAudio2* engine_{};
     IXAudio2MasteringVoice* master_{};
     IXAudio2SourceVoice* music_{};
+    std::string currentMusic_;
+    bool musicLoop_{true};
     bool ownsCom_{};
     bool soundEnabled_{true},musicEnabled_{true},paused_{};
     float musicVolume_{1};

@@ -114,3 +114,8 @@ Toolbar button states are exported by `build_toolbar_assets.py` from original HU
 ## Crawlers (tenth mission)
 
 Cat.as/CatAi.as map to src/campaign_crawlers.cpp and the shared combat dispatch. Actor6123 and map11 come from tools/build_crawler_assets.py. See [the checkpoint](crawlers-checkpoint.md) for measured colliders, the original integer pack rule, source audio aliases, real-window outcomes and open parity limits.
+
+
+## Tactical corrections
+
+MonkAi/Monk, SpeartonAi/Spearton/BlockCommand, Hill/HillControlBar and Team.spawnMiddleUnit map to campaign_magic.cpp, campaign_tutorial.cpp and campaign_hill.cpp. build_tactical_assets.py exports original Block and ghost/effect frames; build_tooltip_assets.py preserves the original measured Block text lines. See [tactical fixes](tactical-fixes.md) for scope and validation.

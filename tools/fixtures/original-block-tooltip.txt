@@ -1,0 +1,3 @@
+Toggles shield wall that reduces
+damage taken by 40% but removes
+ability to move.

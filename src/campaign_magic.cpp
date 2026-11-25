@@ -25,9 +25,14 @@ void CampaignTutorial::castAt(Point at) {
     aimedSpell_=0;
 }
 
-void CampaignTutorial::applyMagicDamage(Unit& target,double damage,bool enemy) {
+void CampaignTutorial::applyMagicDamage(Unit& target,double damage,bool enemy,bool hasInflictor) {
     if (target.hp<=0 || target.cloakTicks) return;
     const bool statue=target.symbol==1904;
+    if(target.inBlock) {
+        const double remaining=1-rules_.at("spearton.shieldWall.damageReduction");
+        if(!hasInflictor)damage=int(int(damage)*remaining);
+        damage*=remaining;
+    }
     if (!statue && difficulty_==Difficulty::Normal) {
         if (target.enemy) damage/=rules_.at("normalHealthScale");
         if (enemy && rules_.contains("normalDamageScale")) damage*=rules_.at("normalDamageScale");
@@ -46,7 +51,10 @@ bool CampaignTutorial::updateCaster(Unit& u) {
                     break;
                 }
             }
-        } else if (u.symbol==healer && u.autoCure && upgrades_[8] && !u.spellCooldown[1] && mana_>=stat(u,"cure.mana")) {
+        } else if (u.symbol==healer && !u.enemy && (u.order==Order::Stand || u.engageOnMove) &&
+                   u.autoCure && upgrades_[8] && !u.spellCooldown[1] && mana_>=stat(u,"cure.mana")) {
+            // Current EnemyGoodTeamAi grants Cloak and Magikill spells, not
+            // MONK_CURE; the player's campaign upgrade never grants enemy tech.
             for (int i=0;i<int(units_.size());++i) {
                 const auto& other=units_[i];
                 if (other.enemy!=u.enemy || other.hp<=0 || other.poison<=0 ||
@@ -57,12 +65,14 @@ bool CampaignTutorial::updateCaster(Unit& u) {
                 break;
             }
         }
-        if (!u.spell && u.symbol==healer && u.autoHeal && !u.spellCooldown[0]) {
+        // MonkAi auto-heals only when mayAttack is true. A plain Move has
+        // priority, whereas Stand/Hold, AttackMove and an explicit target may heal.
+        if (!u.spell && u.symbol==healer && (u.order!=Order::Move || u.engageOnMove) && u.autoHeal && !u.spellCooldown[0]) {
             int candidate=-1;
             for (int i=0;i<int(units_.size());++i) {
                 const auto& other=units_[i];
                 if (other.enemy!=u.enemy || other.hp<=0 || other.hp>=other.maxHp ||
-                    std::abs(other.position.x-u.position.x)>100 || std::abs(other.position.y-u.position.y)>100) continue;
+                    !spatialAreaContains(u.position,100,other.position)) continue;
                 if (candidate<0 || other.hp<units_[candidate].hp) candidate=i;
             }
             if (candidate>=0) {
