@@ -21,7 +21,7 @@ COLUMNS=("step tick camera cursorX cursorY gold garrisoned research castleShots 
          "bankQ barracksQ archerQ magicQ templeQ siegeQ deadX deadY mana fighters").split()
 
 
-def run(width,height,initial_only=False):
+def run(width,height,initial_only=False,frontline='sword'):
     out=Path(os.environ.get('DW2_TEST_EVIDENCE',ROOT/'evidence/windows-deads'));out.mkdir(parents=True,exist_ok=True)
     prefix=f'{width}x{height}';trace=out/f'{prefix}-steps.tsv';capture=out/f'{prefix}-capture.png'
     trace.unlink(missing_ok=True)
@@ -131,7 +131,9 @@ def run(width,height,initial_only=False):
                     last_tick=tick
                     if tick>=next_army:
                         next_army=tick+120
-                        attacking=attacking or current['alliedWizards']>=2 or current['alliedGiants']>=2
+                        ready=current['alliedWizards']>=2 or current['alliedGiants']>=2
+                        if frontline=='spearton':ready=ready or (current['alliedWizards']>=1 and current['lancers']>=2)
+                        attacking=attacking or ready
                         click(500 if attacking else 425,634)
                         if current['alliedWizards']>0:space();time.sleep(.02);space()
                     gold,mana=current['gold'],current['mana']
@@ -139,14 +141,25 @@ def run(width,height,initial_only=False):
                     # Buy only one order per fresh trace sample, so subsequent
                     # choices observe the actual post-purchase resource totals.
                     if current['miners']+current['bankQ']<10 and current['bankQ']<5 and gold>=150:click(30,610)
+                    elif frontline=='spearton' and current['alliedHealers']+current['templeQ']<1 and gold>=300 and mana>=200:click(200,610)
+                    elif frontline=='spearton' and current['lancers']+current['barracksQ']<1 and gold>=450 and mana>=50:click(56,665)
+                    elif frontline=='spearton' and current['alliedWizards']+current['magicQ']<1 and gold>=500 and mana>=500:click(260,610)
                     elif current['alliedHealers']+current['templeQ']<2 and gold>=300 and mana>=200:click(200,610)
+                    elif frontline=='spearton' and current['lancers']+current['barracksQ']<2 and gold>=450 and mana>=50:click(56,665)
                     elif current['alliedWizards']+current['magicQ']<2 and gold>=500 and mana>=500:click(260,610)
                     elif current['miners']>=10 and gold>=1500 and current['alliedGiants']+current['siegeQ']<2:click(230,665)
-                    elif swords+current['barracksQ']<3 and gold>=150:click(88,610)
+                    elif frontline=='sword' and swords+current['barracksQ']<3 and gold>=150:click(88,610)
                     if tick>=next_cast and current['alliedWizards']>0:
                         next_cast=tick+15
                         x=(current['deadX'] if current['deadX']>=0 else 4149)-current['camera']
                         y=min(550,320+(current['deadY'] if current['deadX']>=0 else 125))
+                        if frontline=='spearton':
+                            actors=units()
+                            casters=[u for u in actors if u['enemy']=='0' and u['symbol']=='7926' and float(u['health'])>0]
+                            enemies=[u for u in actors if u['enemy']=='1' and u['symbol']!='7323' and float(u['health'])>0 and -180<float(u['x'])-current['camera']<1030]
+                            if casters and enemies:
+                                target=min(enemies,key=lambda u:min((float(u['x'])-float(c['x']))**2+(float(u['y'])-float(c['y']))**2 for c in casters))
+                                x=float(target['x'])-current['camera'];y=min(550,320+float(target['y']))
                         if -180<x<1030:
                             space()
                             for button in (675,742,812):
@@ -166,7 +179,7 @@ def run(width,height,initial_only=False):
                 record=save.read_text(encoding='utf-8').splitlines();assert record[1].split()[:2]==['9','3'],record[:2]
                 report=dict(resolution=[width,height],victory=True,victoryTick=int(current['tick']),
                     gutsShots=int(current['gutsShots']),poisonHits=int(current['poisonHits']),cures=int(current['cures']),
-                    spells=[int(current[k]) for k in ('nuke','electric','poison')],minersOnlyGarrison=True,initialPrayingMinerVerified=True,startingWorshippers=3,
+                    spells=[int(current[k]) for k in ('nuke','electric','poison')],minersOnlyGarrison=True,initialPrayingMinerVerified=True,startingWorshippers=3,frontline=frontline,
                     savedLevel=9,nextMapFrame=510,magentaPixels=0)
                 (out/f'{prefix}-checks.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8',newline='\n')
                 user.PostMessageW(hwnd,0x10,0,0);assert process.wait(timeout=8)==0
@@ -178,5 +191,5 @@ def run(width,height,initial_only=False):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('width',type=int);parser.add_argument('height',type=int);parser.add_argument('--initial-only',action='store_true')
-    args=parser.parse_args();run(args.width,args.height,args.initial_only)
+    parser=argparse.ArgumentParser();parser.add_argument('width',type=int);parser.add_argument('height',type=int);parser.add_argument('--initial-only',action='store_true');parser.add_argument('--frontline',choices=('sword','spearton'),default='sword')
+    args=parser.parse_args();run(args.width,args.height,args.initial_only,args.frontline)
