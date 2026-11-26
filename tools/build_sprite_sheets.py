@@ -120,10 +120,12 @@ class Page:
         return x, y
 
 
-def pack_cells(cells):
+def pack_cells(cells, timeline_order=False):
     pages = []
-    ordered = sorted(cells, key=lambda c: (-max(c.width, c.height), -c.width*c.height,
-                                          -c.height, -c.width, c.first_row, c.file))
+    # Giant timelines benefit from adjacent poses sharing a page. Sorting every
+    # frame globally by size scattered their working set across unrelated pages.
+    ordered = sorted(cells, key=(lambda c: (c.first_row,c.file)) if timeline_order else
+                     (lambda c: (-max(c.width,c.height),-c.width*c.height,-c.height,-c.width,c.first_row,c.file)))
     for cell in ordered:
         required = max(cell.width, cell.height)+PADDING*2
         # A large two-dimensional frame cannot share a 2048 page with a peer.
@@ -211,7 +213,7 @@ def convert_folder(source, output, name, backgrounds):
         cell.files.append(name_in_manifest)
         by_file[name_in_manifest] = cell
         image.close()
-    pages = pack_cells(cells)
+    pages = pack_cells(cells, timeline_order=name=="giants")
     target.mkdir(parents=True)
     atlas_dir = target/'atlases'
     if pages:
@@ -324,7 +326,7 @@ def convert_folder(source, output, name, backgrounds):
                 staticBackgroundRowsExcluded=sum(len(by_symbol[symbol]) for symbol in excluded),
                 originalAnimatedPngFiles=len(files), uniqueRgbaCells=len(cells), identicalRgbaFilesDeduplicated=len(files)-len(cells),
                 atlasFiles=len(pages), atlases=page_reports, inputFiles=len(input_paths), outputFiles=len(output_paths),
-                packingPolicy='adaptive-2048-or-4096', largeCellThresholdIncludingPadding=LARGE_CELL_THRESHOLD,
+                packingPolicy='adaptive-2048-or-4096', packingOrder='timeline' if name=='giants' else 'size', largeCellThresholdIncludingPadding=LARGE_CELL_THRESHOLD,
                 promotedLargeCells=sum(cell.width+PADDING*2 > LARGE_CELL_THRESHOLD
                                        and cell.height+PADDING*2 > LARGE_CELL_THRESHOLD for cell in cells),
                 inputBytes=input_bytes, outputBytes=output_bytes, bytesSaved=input_bytes-output_bytes,
