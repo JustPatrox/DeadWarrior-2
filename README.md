@@ -48,6 +48,7 @@ This project is not affiliated with Max Games or the original game's creators. S
 | Original toolbar hover and pressed states | Implemented, including action-slot glow |
 | Original campaign pause menu | MENU, Esc, or P |
 | Animated original trailer intro | Native 30 fps playback, music/effects, Skip and Back controls |
+| Animation storage | Lossless sprite sheets and one indexed lossless intro movie; original pixel resolution retained |
 | Persistent PC settings | Saved in `options.ini` |
 | Remaining campaign and cutscenes | Pending |
 | macOS and Linux | Native preview builds; platform validation in progress |
@@ -81,7 +82,7 @@ cd DeadWarrior-2
 & '.\out\windows-x64\DeadWarrior 2.exe'
 ```
 
-See the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md) for details. Preparing resources from an original SWF is an **optional developer workflow**, using Python, Java, and FFDec. Those tools are not part of the game runtime. The source tree keeps generated game resources out of Git; releases include everything needed to play.
+See [animation storage](docs/animation-storage.md), the [build guide](docs/building.md) and [macOS/Linux guide](docs/portable.md) for details. Preparing resources from an original SWF is an **optional developer workflow**, using Python, Java, and FFDec. Those tools are not part of the game runtime. The source tree keeps generated game resources out of Git; releases include everything needed to play.
 
 ## PC controls
 

@@ -58,6 +58,41 @@ int main(int argc,char** argv) {
         bool rejected=false;
         try {IntroMovie invalid(bad,[](const auto&){return Raster{};});}catch(const std::runtime_error&){rejected=true;}
         require(rejected,"Intro resource traversal was accepted");
+        require(argc>2,"Missing lossless chunk fixture");
+        const auto packed=root/"chunked";std::filesystem::create_directories(packed);
+        std::filesystem::copy_file(argv[2],packed/"movie.dw2v",std::filesystem::copy_options::overwrite_existing);
+        std::ofstream(packed/"frames.tsv")<<"DeadWarrior2-Intro 2\n8 4 30 70 3 72\nmusic.wav\nmovie.dw2v\n";
+        std::ofstream(packed/"events.tsv")<<"33 audio/one.wav\n33 audio/two.wav\n72 audio/end.wav\n";
+        // Three independent chunks: 30 identical slots coalesced to one visual,
+        // 30 slots coalesced to three visuals, and ten distinct translucent slots.
+        for(bool prefetch:{false,true}) {
+            IntroMovie chunked(packed,[](const auto&)->Raster{throw std::runtime_error("Container opened a PNG frame");},prefetch);
+            chunked.start();auto retained=chunked.pixels();
+            auto check=[&](int slot) {
+                const auto pixels=chunked.pixels();
+                const std::array<std::uint8_t,4> color=slot<30?std::array<std::uint8_t,4>{12,24,36,255}:
+                    slot<60?std::array<std::uint8_t,4>{std::uint8_t((slot-30)/10*60+40),80,120,255}:
+                    std::array<std::uint8_t,4>{std::uint8_t((slot-60)*20),100,30,128};
+                require(chunked.sourceFrame()==slot+3&&pixels&&pixels->width==8&&pixels->height==4,"Chunk logical source clock/canvas differs");
+                for(std::size_t pixel=0;pixel<pixels->rgba.size();++pixel)
+                    require(pixels->rgba[pixel]==color[pixel%4],"Chunk coalesced span RGBA differs");
+            };
+            for(int slot=0;slot<70;++slot) {
+                chunked.advance((slot+.25)/30.);check(slot);
+                const auto before=chunked.statistics().decodes;const auto pixels=chunked.pixels();
+                chunked.advance((slot+.25)/30.);
+                require(chunked.pixels()==pixels&&chunked.statistics().decodes==before,"Repeated container frame decoded again");
+            }
+            require(retained->rgba[0]==12,"Container mutated a published raster");
+            auto events=chunked.takeEffects();require(events.size()==3&&events[0].filename()=="one.wav"&&events[1].filename()=="two.wav"&&events[2].filename()=="end.wav","Container events lost their source clock/order");
+            chunked.advance(chunked.duration());require(chunked.finished(),"Container finish clock differs");
+            for(int slot:{29,28,30,59,60,69,0,40,2,39,62,12}) {
+                chunked.seek((slot+.25)/30.);check(slot);require(chunked.takeEffects().empty(),"Container seek replayed historical audio");
+            }
+            const auto statistics=chunked.statistics();
+            require(statistics.codecDecodes>0&&statistics.maximumCodecRequestDecodes<=30,"Container decoder work exceeded its bound");
+            chunked.stop();require(!chunked.pixels(),"Stopped container retained pixels");chunked.start();check(0);
+        }
         std::cout<<"Authored 30fps clock, immutable RGB delta/key frames, seek, effects, fit and path checks passed\n";
         return 0;
     } catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

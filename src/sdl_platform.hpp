@@ -20,6 +20,7 @@ inline constexpr const char* settingsKeyLabel="Insert";
 #endif
 class SdlRenderer {
     struct Cached {SDL_Texture* image{}; size_t bytes{}; unsigned serial{};};
+    struct AlphaMask {int width{},height{};std::vector<Uint8> alpha;unsigned serial{};};
     SDL_Renderer* renderer_{};
     const MenuAssets& art_;
     RasterCompositor compositor_;
@@ -32,6 +33,10 @@ class SdlRenderer {
     std::array<std::array<float,8>,95> glyphs_{};
     unsigned serial_{};
     size_t bytes_{};
+    std::map<std::filesystem::path,AlphaMask> masks_;
+    size_t maskBytes_{};
+    unsigned maskSerial_{};
+    const AlphaMask& mask(const std::filesystem::path&);
     SDL_Texture* image(const std::filesystem::path&,int tint=0);
     void text(const Draw&,const Viewport&);
 public:

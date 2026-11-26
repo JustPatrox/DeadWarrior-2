@@ -5,6 +5,7 @@
 
 namespace sw2 {
 class IntroFrameCache;
+class ChunkMovie;
 class IntroClock {
     using Clock=std::chrono::steady_clock;
     Clock::time_point start_{},pausedAt_{};
@@ -41,12 +42,17 @@ public:
     std::vector<std::filesystem::path> takeEffects();
     Draw draw(Rect viewport) const;
     std::shared_ptr<const Raster> pixels() const {return pixels_;}
-    struct Statistics {unsigned long long decodes{};double decodeMilliseconds{},composeMilliseconds{};};
-    Statistics statistics() const {return statistics_;}
+    struct Statistics {
+        unsigned long long decodes{},codecDecodes{},codecChunkLoads{},maximumCompressedChunkBytes{};
+        unsigned maximumCodecRequestDecodes{};
+        double decodeMilliseconds{},composeMilliseconds{};
+    };
+    Statistics statistics() const;
 private:
     Statistics statistics_;
     bool prefetchEnabled_{};
     std::unique_ptr<IntroFrameCache> frameCache_;
+    std::shared_ptr<ChunkMovie> chunkMovie_;
     struct Frame {bool key{};std::filesystem::path file;int keyIndex{};};
     struct Effect {int frame{};std::filesystem::path file;};
     std::filesystem::path directory_,music_;

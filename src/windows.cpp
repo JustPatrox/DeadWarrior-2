@@ -91,7 +91,9 @@ public:
                 auto& img=bitmap(it->symbol,it->maskFrame);
                 if (x<0 || y<0 || x>=p.bounds.w || y>=p.bounds.h) continue;
                 gd::Color color;
-                img.GetPixel(int(x*img.GetWidth()/p.bounds.w),int(y*img.GetHeight()/p.bounds.h),&color);
+                const auto region=textureRegion(p);
+                img.GetPixel(int((region.x+x/p.bounds.w*region.w)*img.GetWidth()),
+                             int((region.y+y/p.bounds.h*region.h)*img.GetHeight()),&color);
                 if (!color.GetA()) continue;
             }
             return it->symbol;
@@ -160,7 +162,7 @@ public:
                 if (d.mirrored) g.ScaleTransform(-1,1);
                 dst.X=-dst.Width/2; dst.Y=-dst.Height/2;
             }
-            const auto source=d.source.value_or(Rect{0,0,1,1});
+            const auto source=d.children||d.pixels?d.source.value_or(Rect{0,0,1,1}):textureRegion(assets_.texture(d.symbol,d.frame),d.source);
             auto status=g.DrawImage(&img,dst,float(source.x*img.GetWidth()),float(source.y*img.GetHeight()),
                 float(source.w*img.GetWidth()),float(source.h*img.GetHeight()),gd::UnitPixel,&attributes);
             g.Restore(state);

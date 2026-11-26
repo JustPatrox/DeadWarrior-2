@@ -4,7 +4,7 @@ The intro uses the original Stick War 2 trailer supplied by the user. Its animat
 
 The supplied file is `595764_stickwar2trailermay21fixla.swf`, 14,267,993 bytes, SHA-256 `a2a1bc496bb9e784fa4f5650c0368e0c3faf0bfda3fa3350979aa9f4651ef4ac`. It is a separate trailer input from the campaign game SWF. Inspection found SWF 10, ActionScript 3, a 720 by 480 stage, 30 fps and 3,235 root frames. The original file and the working source copy are unchanged.
 
-Playback starts at authored frame 3, after the loading/start frames, and includes frame 3,235. The 3,233 displayed frames occupy exactly `3233 / 30` seconds, or 107.7666667 seconds. Source frame numbers are retained in both the picture table and the sound-event table. The native player reads prepared images and PCM audio; it does not execute a SWF or require Flash at runtime.
+Playback starts at authored frame 3, after the loading/start frames, and includes frame 3,235. The 3,233 displayed frames occupy exactly `3233 / 30` seconds, or 107.7666667 seconds. Source frame numbers are retained in both the picture table and the sound-event table. The native player reads prepared lossless animation and PCM audio; it does not execute a SWF or require Flash at runtime.
 
 ## Capture and composition
 
@@ -16,7 +16,11 @@ Uniform source screen fills also need to cover the newly exposed sides. The fina
 
 This is a fixed capture of an authored performance, with a measured limitation. An earlier export's twelve 30 fps wide samples and corresponding complete-capture frames produced ten exact RGBA matches. Frame 877 differed at 923 pixels; frame 1,769 differed at 11,045 pixels. Several source animation clips use `Math.random()` to choose their starting phases, which is a possible source of variation, but these two differences have not been attributed conclusively. The historical comparison is recorded in `work/intro-reference-clock-comparison.json`. The same-EXIT_FRAME screen-fill comparison avoids this uncertainty. The all-frame lossless checks below establish equality to the final exported capture, not pixel identity across every independent Adobe replay.
 
-## Lossless resources and native decoding
+## Current storage
+
+The published preview.13 used the PNG key/XOR resources documented below. The storage update uses lossless sprite sheets for animated game artwork and one indexed lossless intro movie; see [animation storage](animation-storage.md) for its format, conversion and checks. The exported capture and audio described here remain the reference, and the version-1 reader is retained for older prepared resources.
+
+## Legacy PNG resources and native decoding
 
 `tools/pack_intro_frames.py` writes opaque PNG keys and RGB XOR deltas. A key is a byte-for-byte copy of its captured PNG. A delta is chosen only when smaller, and its RGB bytes are XORed with the preceding reconstructed picture; alpha remains 255. A key is forced after at most 29 consecutive deltas. The runtime manifest is published only after the complete capture manifest exists and all reconstructed RGBA frames match their captures. Incomplete PNG writes are rejected until their IEND chunk is present.
 
@@ -30,7 +34,7 @@ Ordinary forward delta decoding uses at most three working 1280 by 720 RGBA vect
 
 The final prepared CPU check reported PNG decode p50 10.6295 ms and p95 14.3253 ms on the local verification machine. These measurements include local file access and decoding, and exclude rendering, audio and real-time pacing. They do not establish game FPS or universal playback performance.
 
-## Bounded PNG prefetch and Windows timing
+## Original PNG prefetch and Windows timing
 
 `IntroFrameCache` uses one CPU worker to prepare upcoming PNGs. The requested frame takes priority over obsolete queued work after a forward skip or seek. Clearing playback invalidates completed and queued work by generation and stops scheduling new work. Any older decode is discarded when it returns, after which the worker waits. Clear does not wait for that decode; destruction joins the worker. Decoder failures are stored under their frame index and rethrown only when that frame is requested. The worker performs no GPU operations.
 
@@ -65,10 +69,10 @@ Sound 1680 contains 135 trailing non-audio bytes, including an ID3v1 record. Exc
 
 The native file-audio APIs use unity gain for these already prepared WAVs. Windows converts its source-voice sample count using that WAV's sample rate. The existing SDL mixer runs at 48,000 Hz stereo, so its interleaved float cursor is divided by 96,000 to obtain seconds. File music and movie effects can pause, and movie-effect cleanup preserves ordinary UI effects, narration and music. Named background music retains its prior continuity behavior. Windows file-clock/category checks and the existing 187-sound registry/loop test passed; platform frontend playback remains a separate release gate.
 
-## A future release
+## Release validation
 
-The intro is private work after preview.12. None of these resources or source changes have been added to a new public release by this documentation step. The existing packaging code already extracts every `assets/` entry from a seed and installs that directory into the platform package, so it can carry `assets/intro` without a new container format. It still requires a clean, verified seed containing the new resources. The final corrected intro folder contains 3,256 files and 1,035,307,558 bytes; adding only that folder to the frozen preview.12 payload would yield 18,039 files. Final package counts and download sizes must be measured after staging.
+Preview.13 published the corrected capture, 30 Hz native playback, bounded PNG prefetch and Windows presentation fix. Its resources and packages are preserved as the input baseline for the lossless storage conversion. The final corrected version-1 intro folder contains 3,256 files and 1,035,307,558 bytes.
 
-The maintainer preparation pipeline currently accepts the campaign SWF only. Trailer preparation needs its separate supplied input, provenance check, observer capture, frame packing and audio builder; it must not be silently treated as part of the campaign SWF extraction. Public source updates need an explicit allowlist for the intro core, platform integration, builders, observer, tests and this document. Generated captures, SWFs, WAVs and PNGs remain outside public source Git history, as required by the repository audit.
+Trailer preparation uses the separately supplied input and the existing capture/provenance/audio checks; it is not part of campaign-SWF extraction. Generated captures, SWFs, original audio and game PNGs remain outside public source Git history. Repacking previously verified resources does not re-extract or modify the source SWFs.
 
-Future release validation must require intro availability and animation, multiple original frame states including a delta and the camera segment, skip/end/restart behavior, pause and channel switches, and packaged resource hashes. The Windows all-frame hash proof does not automatically verify Linux or either Mac decoder. Their final executable reports must exercise the feature too. New validation helpers must use the final registered CTest count, source SHA, exact executable and measured payload counts rather than preview.12's fixed nineteen tests and 14,783 files. Existing four-platform build, checksum, anonymous-tag/download and freeze gates still apply. Build from the frozen released payload plus approved intro changes; do not copy unrelated private future-mission assets into a seed or alter published preview.12 packages.
+Each new storage version must pass all exported RGBA hashes, event order, source clock, seeks, pause, skip, finish/restart and packaged-resource checks. Windows validation precedes the four-platform native release workflow. Its portable runtime reports exercise the actual packaged decoder and require the registered deterministic checks, intro flags, sprite sheets and lossless movie. These checks do not certify complete campaign parity or every Adobe rendering/audio behavior described above.

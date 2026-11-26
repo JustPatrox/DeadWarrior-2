@@ -122,8 +122,10 @@ void SdlRenderer::draw(const std::vector<Draw>& draws,int w,int h) {
         if(d.symbol || d.children || d.pixels) {
             auto texture=d.children || d.pixels ? composite(d) : image(art_.texture(d.symbol,d.frame).file,d.redOffset);
             SDL_SetTextureAlphaMod(texture,Uint8(std::clamp(d.alpha,0.,1.)*255));
-            SDL_FRect source{};if(d.source) {float tw,th;SDL_GetTextureSize(texture,&tw,&th);const auto a=*d.source;source={float(a.x*tw),float(a.y*th),float(a.w*tw),float(a.h*th)};}
-            SDL_RenderTextureRotated(renderer_,texture,d.source ? &source : nullptr,&dst,d.rotation,nullptr,d.mirrored ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+            const auto region=d.children||d.pixels?d.source.value_or(Rect{0,0,1,1}):textureRegion(art_.texture(d.symbol,d.frame),d.source);
+            float tw{},th{};SDL_GetTextureSize(texture,&tw,&th);
+            const SDL_FRect source{float(region.x*tw),float(region.y*th),float(region.w*tw),float(region.h*th)};
+            SDL_RenderTextureRotated(renderer_,texture,&source,&dst,d.rotation,nullptr,d.mirrored ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
         } else {
             const auto c=color(d);SDL_SetRenderDrawColor(renderer_,c.r,c.g,c.b,c.a);
             if(d.kind==Draw::Kind::Text) text(d,v);
@@ -161,6 +163,23 @@ void SdlRenderer::png(const std::filesystem::path& file) {
     const bool ok=SDL_SavePNG(surface,file.string().c_str());SDL_DestroySurface(surface);
     if(!ok) throw std::runtime_error(SDL_GetError());
 }
+const SdlRenderer::AlphaMask& SdlRenderer::mask(const std::filesystem::path& file) {
+    if(auto found=masks_.find(file);found!=masks_.end()) {
+        found->second.serial=++maskSerial_;return found->second;
+    }
+    // A menu pointer event must not decode a whole sheet again. Keep only the
+    // alpha channel for interactive masks, separately from GPU texture pages.
+    auto pixels=loadSdlPng(file);
+    AlphaMask value{pixels.width,pixels.height,{},++maskSerial_};
+    value.alpha.resize(size_t(value.width)*value.height);
+    for(size_t i=0;i<value.alpha.size();++i)value.alpha[i]=pixels.rgba[i*4+3];
+    constexpr size_t budget=32*1024*1024;
+    while(maskBytes_+value.alpha.size()>budget&&!masks_.empty()) {
+        auto oldest=std::min_element(masks_.begin(),masks_.end(),[](const auto& a,const auto& b){return a.second.serial<b.second.serial;});
+        maskBytes_-=oldest->second.alpha.size();masks_.erase(oldest);
+    }
+    maskBytes_+=value.alpha.size();return masks_.emplace(file,std::move(value)).first->second;
+}
 int SdlRenderer::hit(const CampaignMenu& menu,Point p) {
     const auto hits=menu.hits();
     for(auto it=hits.rbegin();it!=hits.rend();++it) {
@@ -171,9 +190,10 @@ int SdlRenderer::hit(const CampaignMenu& menu,Point p) {
             if(!place) continue;
             const double x=(p.x-it->bounds.x)/place->sx+place->bounds.x-art.bounds.x,y=(p.y-it->bounds.y)/place->sy+place->bounds.y-art.bounds.y;
             if(x<0||y<0||x>=art.bounds.w||y>=art.bounds.h) continue;
-            auto surface=SDL_LoadPNG(art.file.string().c_str());if(!surface) throw std::runtime_error(SDL_GetError());
-            Uint8 r,g,b,a;const bool ok=SDL_ReadSurfacePixel(surface,int(x*surface->w/art.bounds.w),int(y*surface->h/art.bounds.h),&r,&g,&b,&a);SDL_DestroySurface(surface);
-            if(!ok||!a) continue;
+            const auto& alpha=mask(art.file);
+            const auto region=textureRegion(art);
+            const int px=int((region.x+x/art.bounds.w*region.w)*alpha.width),py=int((region.y+y/art.bounds.h*region.h)*alpha.height);
+            if(px<0||py<0||px>=alpha.width||py>=alpha.height||!alpha.alpha[size_t(py)*alpha.width+px])continue;
         }
         return it->symbol;
     }

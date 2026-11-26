@@ -51,11 +51,11 @@ void blendPixel(std::uint8_t* d,const std::uint8_t* s,Draw::Blend mode) {
     d[3]=std::uint8_t(std::clamp(std::lround(out*255),0l,255l));
 }
 namespace {
-void sample(const Raster& r,double x,double y,std::uint8_t* out) {
+void sample(const Raster& r,double x,double y,std::uint8_t* out,Rect clip) {
     const int ix=int(std::floor(x)),iy=int(std::floor(y));const double fx=x-ix,fy=y-iy;
     double values[4]{};
     for(int dy=0;dy<2;++dy) for(int dx=0;dx<2;++dx) {
-        if(ix+dx<0 || iy+dy<0 || ix+dx>=r.width || iy+dy>=r.height) continue;
+        if(ix+dx<clip.x || iy+dy<clip.y || ix+dx>=clip.x+clip.w || iy+dy>=clip.y+clip.h) continue;
         const auto* p=r.rgba.data()+4*((iy+dy)*r.width+ix+dx);
         const double weight=(dx ? fx : 1-fx)*(dy ? fy : 1-fy),alpha=weight*p[3]/255.;
         for(int c=0;c<3;++c) values[c]+=alpha*p[c];values[3]+=alpha;
@@ -71,7 +71,10 @@ std::shared_ptr<const Raster> RasterCompositor::image(const Draw& group) {
     auto mix=[&](std::size_t h){hash^=h+0x9e3779b9+(hash<<6)+(hash>>2);};
     mix(std::hash<double>{}(group.target.w));mix(std::hash<double>{}(group.target.h));
     for(const auto& d:*group.children) {
-        mix(std::filesystem::hash_value(assets_.texture(d.symbol,d.frame).file));
+        const auto& texture=assets_.texture(d.symbol,d.frame);
+        mix(std::filesystem::hash_value(texture.file));
+        const auto region=textureRegion(texture,d.source);
+        for(double value:{region.x,region.y,region.w,region.h})mix(std::hash<double>{}(value));
         for(double v:{d.target.x,d.target.y,d.target.w,d.target.h,d.alpha}) mix(std::hash<double>{}(v));
         mix(std::size_t(d.blend));
     }
@@ -81,21 +84,27 @@ std::shared_ptr<const Raster> RasterCompositor::image(const Draw& group) {
         throw std::runtime_error("Invalid original castle composite dimensions");
     result->rgba.resize(std::size_t(result->width)*result->height*4);++serial_;
     for(const auto& d:*group.children) {
-        const auto& file=assets_.texture(d.symbol,d.frame).file;
+        const auto& texture=assets_.texture(d.symbol,d.frame);
+        const auto& file=texture.file;
         auto found=images_.find(file);
         if(found==images_.end()) {
             auto image=decode_(file);bytes_+=image.rgba.size();Entry entry;entry.image=std::move(image);entry.used=serial_;
             found=images_.emplace(file,std::move(entry)).first;
         }
         auto& entry=found->second;entry.used=serial_;const auto& src=entry.image;const Raster* raster=&src;
+        const auto uv=textureRegion(texture,d.source);
+        const Rect region{uv.x*src.width,uv.y*src.height,uv.w*src.width,uv.h*src.height};
         const double fx=d.target.x-std::floor(d.target.x),fy=d.target.y-std::floor(d.target.y);
-        if(entry.source!=raster || entry.x!=fx || entry.y!=fy || entry.w!=d.target.w || entry.h!=d.target.h) {
+        if(entry.source!=raster || entry.x!=fx || entry.y!=fy || entry.w!=d.target.w || entry.h!=d.target.h ||
+           entry.region.x!=region.x || entry.region.y!=region.y || entry.region.w!=region.w || entry.region.h!=region.h) {
             entry.source=raster;
+            entry.region=region;
             bytes_-=entry.sampled.rgba.size();entry.x=fx;entry.y=fy;entry.w=d.target.w;entry.h=d.target.h;
             auto& cache=entry.sampled;cache.width=int(std::ceil(fx+d.target.w));cache.height=int(std::ceil(fy+d.target.h));
             cache.rgba.resize(size_t(cache.width)*cache.height*4);
             for(int y=0;y<cache.height;++y) for(int x=0;x<cache.width;++x)
-                sample(src,(x+.5-fx)*src.width/d.target.w-.5,(y+.5-fy)*src.height/d.target.h-.5,cache.rgba.data()+4*(size_t(y)*cache.width+x));
+                sample(src,region.x+(x+.5-fx)*region.w/d.target.w-.5,region.y+(y+.5-fy)*region.h/d.target.h-.5,
+                       cache.rgba.data()+4*(size_t(y)*cache.width+x),region);
             bytes_+=cache.rgba.size();
         }
         const int left=std::max(0,int(std::floor(d.target.x))),top=std::max(0,int(std::floor(d.target.y)));

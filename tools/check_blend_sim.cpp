@@ -31,6 +31,29 @@ void checkDirectRaster() {
         auto second=std::make_shared<Raster>(*first);second->rgba[0]=247;draw.pixels=second;
         if(compositor.image(draw)!=second || first->rgba[0]!=9 || decoded)
             throw std::runtime_error("Direct Raster frame replacement or shared ownership failed");
+        // Two frames share one decoded page. Changing only UV must invalidate
+        // both the composite signature and the sampled-image cache.
+        std::ofstream(menu/"textures.tsv")<<"1 1 sheet.png 0 0 1 1 .25 0 .25 1\n"
+            <<"1 2 sheet.png 0 0 1 1 .75 0 .25 1\n"<<"2 1 single.png 0 0 1 1\n";
+        MenuAssets sheets(menu);int pageDecodes=0;
+        auto decoder=[&](const std::filesystem::path& file) {
+            if(file.filename()=="single.png")return Raster{1,1,{231,17,9,255}};
+            ++pageDecodes;return Raster{4,1,{231,17,9,255,231,17,9,255,7,29,213,255,7,29,213,255}};
+        };
+        RasterCompositor atlas(sheets,decoder),single(sheets,decoder);
+        Draw sprite{1,1,{0,0,1,1}};
+        auto red=atlas.image(Draw::group({sprite},{0,0}));
+        sprite.frame=2;auto blue=atlas.image(Draw::group({sprite},{0,0}));
+        if(red->rgba!=std::vector<std::uint8_t>({231,17,9,255}) || blue->rgba!=std::vector<std::uint8_t>({7,29,213,255}) || pageDecodes!=1)
+            throw std::runtime_error("Sprite sheet UV or shared page cache failed");
+        sprite.frame=1;sprite.target={.25,.25,2.5,2.5};
+        const auto packed=atlas.image(Draw::group({sprite},{0,0}));
+        sprite.symbol=2;
+        const auto original=single.image(Draw::group({sprite},{0,0}));
+        if(packed->rgba!=original->rgba)throw std::runtime_error("Sheet sampling changed fractional-scale edge pixels");
+        const auto uv=textureRegion(sheets.texture(1,1),Rect{.25,0,.5,1});
+        if(uv.x!=.3125 || uv.w!=.125 || uv.y!=0 || uv.h!=1)
+            throw std::runtime_error("Sprite sheet crop composition failed");
     } catch(...) {
         // Remove only the four exact paths created by this fixture.
         for(const char* name:{"textures.tsv","placements.tsv","alpha.tsv"})std::filesystem::remove(menu/name);
@@ -100,5 +123,5 @@ int main() {
     }
     try {checkDirectRaster();}
     catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
-    std::cout<<"48 original Flash alpha/blend samples and direct Raster ownership/frame replacement passed\n";return 0;
+    std::cout<<"48 original Flash alpha/blend samples, Raster ownership and lossless sheet UV/cache/scale passed\n";return 0;
 }

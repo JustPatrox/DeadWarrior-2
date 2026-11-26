@@ -11,7 +11,7 @@ void blendPixel(std::uint8_t* destination,const std::uint8_t* source,Draw::Blend
 class RasterCompositor {
     const MenuAssets& assets_;
     std::function<Raster(const std::filesystem::path&)> decode_;
-    struct Entry {Raster image,sampled;const Raster* source{};double x{-1},y{},w{},h{};unsigned used{};};
+    struct Entry {Raster image,sampled;const Raster* source{};double x{-1},y{},w{},h{};unsigned used{};Rect region{};};
     std::map<std::filesystem::path,Entry> images_;
     std::shared_ptr<const Raster> last_;
     std::size_t signature_{},bytes_{};

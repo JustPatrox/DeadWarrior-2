@@ -308,6 +308,8 @@ public:
     }
     void selfTest(const fs::path& out) {
         fs::create_directories(out);auto require=[](bool value,const char* reason){if(!value) throw std::runtime_error(reason);};
+        const bool spriteSheets=std::any_of(art_.art.begin(),art_.art.end(),[](const auto& entry){return entry.second.region.has_value();});
+        require(spriteSheets,"Prepared smoke-test assets contain no sprite sheets");
         require(audio_.testMix(),"Audio decode/playback failed");
         draw(1280,720,out/"notice.png");notice_=false;
         for(int i=0;i<200;++i) tick();require(menu_.page()==Page::Main,"Menu did not finish opening");draw(1280,720,out/"main.png");
@@ -327,6 +329,7 @@ public:
         for(const auto& hit:menu_.hits())require(hit.symbol!=998&&hit.symbol!=1044,"Intro retained an invisible image link");
         const int introBefore=intro_.sourceFrame();SDL_Delay(220);tick();
         require(intro_.sourceFrame()>introBefore,"Audio presentation clock did not advance the intro");
+        const bool losslessIntro=intro_.statistics().codecDecodes>0;
         draw(1280,720,out/"intro.png");
         toggleSettings();const int pausedFrame=intro_.sourceFrame();const auto pausedSamples=audio_.musicSamplesPlayed();
         SDL_Delay(180);for(int i=0;i<8;++i)tick();
@@ -451,7 +454,7 @@ public:
         require(save(),"Campaign save failed");loadSave();require(saved_&&saved_->level==CampaignProgress::playableLevelCount,"Campaign save round trip failed");
         const auto opts=saveDir_/"options.ini";require(fs::exists(opts),"Options were not saved");
         SdlDisplay restored(window_,renderer_.native(),opts);require(restored.showFps(),"Options did not restore");
-        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true,\"singleClickSelection\":true,\"dragSelection\":true,\"castleArcherTiers\":true,\"tacticalCommands\":true,\"blockStance\":true,\"towerSpawn\":true,\"musicContinuity\":true,\"introAutoplay\":true,\"introPause\":true,\"introSkip\":true}\n";
+        std::ofstream report(out/"checks.json");report<<"{\"platform\":\""<<SDL_GetPlatform()<<"\",\"settingsKey\":\""<<settingsKeyLabel<<"\",\"settingsKeyVerified\":true,\"menuInput\":true,\"missionEntries\":"<<CampaignProgress::playableLevelCount<<",\"render720And1080\":true,\"pauseFreezesClock\":true,\"resume15Ticks\":true,\"settingsPersist\":true,\"audioPlayback\":true,\"campaignSaveRoundTrip\":true,\"unfinishedGuard\":true,\"mouseLockSetting\":true,\"aspectModes\":true,\"borderlessDesktop\":true,\"pcToolbar\":true,\"originalTooltip\":true,\"toolbarStates\":true,\"settingsCentered\":true,\"dynamicDefault\":true,\"portraitMenu\":true,\"singleClickSelection\":true,\"dragSelection\":true,\"castleArcherTiers\":true,\"tacticalCommands\":true,\"blockStance\":true,\"towerSpawn\":true,\"musicContinuity\":true,\"introAutoplay\":true,\"introPause\":true,\"introSkip\":true,\"spriteSheets\":true,\"losslessIntro\":"<<std::boolalpha<<losslessIntro<<"}\n";
         log("SELF-TEST passed");
     }
 };

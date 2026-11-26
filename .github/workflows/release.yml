@@ -125,7 +125,7 @@ jobs:
           assert all(value for value in report.values() if isinstance(value,bool))
           for name in ('tacticalCommands','blockStance','towerSpawn','musicContinuity',
                        'singleClickSelection','dragSelection','castleArcherTiers',
-                       'introAutoplay','introPause','introSkip'):
+                       'introAutoplay','introPause','introSkip','spriteSheets','losslessIntro'):
               assert report[name] is True, name
           expected=('macOS','Option') if os.environ['RUNNER_OS']=='macOS' else ('Linux','Insert')
           assert (report['platform'],report['settingsKey'])==expected

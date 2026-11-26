@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <fstream>
+#include <sstream>
+#include <cmath>
 #include <stdexcept>
 
 namespace sw2 {
@@ -45,12 +47,24 @@ void coverBackdrop(std::vector<Draw>& out,Draw d,Rect area) {
 }
 
 void MenuAssets::loadTextures(const std::filesystem::path& dir) {
-    int id, frame;
-    std::string filename;
-    Rect bounds;
     std::ifstream textures(dir/"textures.tsv");
-    while (textures >> id >> frame >> filename >> bounds.x >> bounds.y >> bounds.w >> bounds.h)
-        art[{id,frame}] = Art{dir/filename,bounds};
+    for(std::string line;std::getline(textures,line);) {
+        if(line.empty())continue;
+        std::istringstream fields(line);int id{},frame{};std::string filename;Rect bounds;
+        if(!(fields>>id>>frame>>filename>>bounds.x>>bounds.y>>bounds.w>>bounds.h))
+            throw std::runtime_error("Invalid texture row: "+dir.string());
+        Art item{dir/filename,bounds};fields>>std::ws;
+        if(!fields.eof()) {
+            Rect region;
+            if(!(fields>>region.x>>region.y>>region.w>>region.h)||!std::isfinite(region.x)||!std::isfinite(region.y)||
+                !std::isfinite(region.w)||!std::isfinite(region.h)||region.x<0||region.y<0||region.w<=0||region.h<=0||
+                region.x+region.w>1+1e-12||region.y+region.h>1+1e-12)
+                throw std::runtime_error("Invalid sprite sheet frame: "+dir.string());
+            if(region.x!=0||region.y!=0||region.w!=1||region.h!=1)item.region=region;
+            std::string extra;if(fields>>extra)throw std::runtime_error("Extra sprite sheet fields: "+dir.string());
+        }
+        art[{id,frame}]=std::move(item);
+    }
     if (!textures.eof() || !textures.is_open()) throw std::runtime_error("Invalid textures: "+dir.string());
 }
 void MenuAssets::loadPlacements(const std::filesystem::path& dir) {
@@ -97,7 +111,11 @@ const Placement& MenuAssets::placement(int owner, int id) const {
     if (it == list.end()) throw std::runtime_error("Missing original symbol placement");
     return *it;
 }
-const Art& MenuAssets::texture(int symbol,int frame) const { return art.at({symbol,frame}); }
+const Art& MenuAssets::texture(int symbol,int frame) const {
+    const auto found=art.find({symbol,frame});
+    if(found==art.end())throw std::runtime_error("Missing original texture symbol="+std::to_string(symbol)+" frame="+std::to_string(frame));
+    return found->second;
+}
 double MenuAssets::alpha(int symbol,int frame) const { return alphas.at({symbol,frame}); }
 
 constexpr std::array panels{1006,1011,1024,1028};

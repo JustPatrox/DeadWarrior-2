@@ -13,3 +13,5 @@ A distribution license for this project's code has not yet been selected. This n
 ## Portable platform libraries
 
 The macOS and Linux frontend uses SDL 3 (zlib license) and stb_truetype (MIT/public domain). Their license texts are included with the downloads. Noto Sans is distributed under the SIL Open Font License 1.1; see `art/fonts/OFL.txt`. These libraries do not replace the native C++ campaign simulation.
+
+Lossless cinematic decoding uses libwebp 1.6.0 (BSD license and accompanying patent grant). Its license text is included as `licenses/libwebp.txt` on every platform. Asset conversion retains the original artwork and audio attribution.

@@ -78,7 +78,7 @@ class PngPrefetch {
             try {ok=decodePixels(key,pixels);}catch(const std::exception&){}
             std::lock_guard lock(mutex_);pending_.erase(key);if(stop_)return;
             if(!ok)continue;
-            constexpr size_t budget=32*1024*1024;
+            constexpr size_t budget=64*1024*1024; // One maximum 4096x4096 atlas, or several smaller pages.
             while(bytes_+pixels.bgra.size()>budget && !ready_.empty()) {
                 bytes_-=ready_.begin()->second.bgra.size();ready_.erase(ready_.begin());
             }
@@ -187,6 +187,7 @@ struct HardwareRenderer::Device {
         const auto key=std::pair{assets.texture(d.symbol,d.frame).file,d.redOffset};
         if (const auto found=textures.find(key); found!=textures.end()) {
             found->second.used=frame;
+            if(assets.texture(d.symbol,d.frame).region)predict(d);
             return found->second.bitmap.Get();
         }
         const auto started=std::chrono::steady_clock::now();
@@ -208,7 +209,7 @@ struct HardwareRenderer::Device {
 
     void predict(const Draw& d) {
         if(!prefetchEnabled || d.children || d.pixels)return;
-        switch(d.symbol) {
+        if(!assets.texture(d.symbol,d.frame).region)switch(d.symbol) {
         case 6465:case 6550:case 6730:case 6815:case 7024:
         case 7388:case 7519:case 7525:case 7514:break;
         default:return;
@@ -323,8 +324,9 @@ bool HardwareRenderer::draw(HWND hwnd,int w,int h,const std::vector<Draw>& draws
             const auto mirror=Matrix::Scale(item.mirrored ? -1.f : 1.f,1.f,center);
             target->SetTransform(mirror*Matrix::Rotation(float(item.rotation),center)*stage);
         }
-        if(item.source) {
-            const auto b=bitmap->GetSize();const auto a=*item.source;
+        if(item.source || (item.symbol && !item.children && !item.pixels && d.assets.texture(item.symbol,item.frame).region)) {
+            const auto b=bitmap->GetSize();
+            const auto a=item.children||item.pixels?item.source.value_or(Rect{0,0,1,1}):textureRegion(d.assets.texture(item.symbol,item.frame),item.source);
             const auto source=D2D1::RectF(float(a.x*b.width),float(a.y*b.height),float((a.x+a.w)*b.width),float((a.y+a.h)*b.height));
             target->DrawBitmap(bitmap,r,float(item.alpha),D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,source);
         } else target->DrawBitmap(bitmap,r,float(item.alpha));

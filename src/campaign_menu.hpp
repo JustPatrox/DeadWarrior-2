@@ -43,7 +43,14 @@ struct Placement {
 struct Art {
     std::filesystem::path file;
     Rect bounds;
+    std::optional<Rect> region{}; // Normalized frame rectangle in a lossless sprite sheet.
 };
+
+inline Rect textureRegion(const Art& art,std::optional<Rect> crop={}) {
+    const auto frame=art.region.value_or(Rect{0,0,1,1});
+    const auto part=crop.value_or(Rect{0,0,1,1});
+    return {frame.x+part.x*frame.w,frame.y+part.y*frame.h,part.w*frame.w,part.h*frame.h};
+}
 
 class MenuAssets {
 public:

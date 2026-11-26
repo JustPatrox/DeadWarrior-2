@@ -61,12 +61,16 @@ std::map<int,std::string> hashes(const fs::path& path) {
     return result;
 }
 struct Row {int source{};char kind{};fs::path path;};
-std::vector<Row> frames(const fs::path& directory) {
-    std::ifstream input(directory/"frames.tsv");std::string title,music;int version{},width{},height{},fps{},count{},first{},last{};
+std::vector<Row> frames(const fs::path& directory,int& version) {
+    std::ifstream input(directory/"frames.tsv");std::string title,music;int width{},height{},fps{},count{},first{},last{};
     require(bool(input>>title>>version>>width>>height>>fps>>count>>first>>last>>music),"Invalid frame table");
-    require(title=="DeadWarrior2-Intro"&&version==1&&width==1280&&height==720&&fps==30&&count==3233&&first==3&&last==3235,"Unexpected full intro header");
+    require(title=="DeadWarrior2-Intro"&&(version==1||version==2)&&width==1280&&height==720&&fps==30&&count==3233&&first==3&&last==3235,"Unexpected full intro header");
     std::vector<Row> result;Row row;std::string path;
-    while(input>>row.source>>row.kind>>path) {row.path=directory/path;result.push_back(row);}
+    if(version==2) {
+        require(bool(input>>path)&&path=="movie.dw2v"&&fs::is_regular_file(directory/path),"Missing complete animation container");
+        for(int i=0;i<count;++i)result.push_back({first+i,'K',directory/std::to_string(i)});
+        require(!(input>>path),"Unexpected container frame table rows");
+    } else while(input>>row.source>>row.kind>>path) {row.path=directory/path;result.push_back(row);}
     require(input.eof()&&result.size()==3233,"Invalid complete frame table");
     return result;
 }
@@ -80,7 +84,7 @@ int main(int argc,char** argv) {
         const fs::path directory=fs::absolute(argc>1?argv[1]:"assets/intro");
         const fs::path output=fs::absolute(argc>2?argv[2]:"work/intro-asset-check");fs::create_directories(output);
         const bool prefetch=argc>3&&std::string(argv[3])=="--prefetch";
-        const auto expected=hashes(directory/"frame-hashes.json");const auto table=frames(directory);
+        int version{};const auto expected=hashes(directory/"frame-hashes.json");const auto table=frames(directory,version);
         require(expected.size()==3233,"Expected 3233 source-frame hashes");
         int firstDelta=-1,longest=0,run=0,longestEnd=0,keyAfterDelta=-1;
         for(size_t i=0;i<table.size();++i) {
@@ -88,7 +92,7 @@ int main(int argc,char** argv) {
             if(table[i].kind=='D') {if(firstDelta<0)firstDelta=int(i);if(++run>longest){longest=run;longestEnd=int(i);}}
             else {require(table[i].kind=='K',"Unexpected frame codec");if(run&&keyAfterDelta<0)keyAfterDelta=int(i);run=0;}
         }
-        require(firstDelta>0&&longest>0&&longest<=29&&keyAfterDelta>=0,"Expected bounded delta/key interval not found");
+        if(version==1)require(firstDelta>0&&longest>0&&longest<=29&&keyAfterDelta>=0,"Expected bounded delta/key interval not found");
         std::vector<std::pair<int,fs::path>> events;
         std::ifstream eventFile(directory/"events.tsv");int eventFrame{};std::string eventName;
         while(eventFile>>eventFrame>>eventName)events.emplace_back(eventFrame,(directory/eventName).lexically_normal());
@@ -102,7 +106,7 @@ int main(int argc,char** argv) {
         IntroMovie movie(directory,[&](const fs::path& path) {
             const auto begin=Clock::now();auto raster=loadWindowsPng(path);
             std::lock_guard guard(decodeMutex);decodeTimes.push_back(ms(begin));
-            ++decoded;maxRaster=std::max(maxRaster,raster.rgba.size());return raster;
+            ++decoded;return raster;
         },prefetch);
         require(movie.available()&&std::abs(movie.duration()-3233/30.)<1e-12,"Native movie duration differs");
         require(movie.music()==directory/"music.wav"&&fs::is_regular_file(movie.music()),"Movie music path differs");
@@ -114,6 +118,7 @@ int main(int argc,char** argv) {
             const auto before=Clock::now();movie.advance(seconds);advanceTimes.push_back(ms(before));
             require(movie.sourceFrame()==i+3&&!movie.finished(),"Native frame clock/early finish differs at "+std::to_string(i));
             const auto pixels=movie.pixels();require(pixels&&pixels->width==1280&&pixels->height==720&&pixels->rgba.size()==3686400,"Native pixel dimensions differ");
+            maxRaster=std::max(maxRaster,pixels->rgba.size());
             const std::string digest=sha.hash(pixels->rgba);
             require(digest==expected.at(i+3),"Actual native RGBA differs at source frame "+std::to_string(i+3));
             if(i)actual<<",\n";actual<<"  \""<<i+3<<"\": \""<<digest<<'"';
@@ -129,15 +134,15 @@ int main(int argc,char** argv) {
         const double sequentialMs=ms(began);const auto sequentialDecodes=movie.statistics().decodes;
         movie.advance(movie.duration());require(movie.finished()&&movie.sourceFrame()==3235&&movie.statistics().decodes==sequentialDecodes,"Native finish at 3233/30 differs");
 
-        const std::vector<int> seeks={firstDelta,firstDelta-1,firstDelta+1,longestEnd,keyAfterDelta,2700,0,3232,2631,1000,2500,10};
+        const std::vector<int> seeks=version==1 ? std::vector<int>{firstDelta,firstDelta-1,firstDelta+1,longestEnd,keyAfterDelta,2700,0,3232,2631,1000,2500,10} : std::vector<int>{29,28,30,59,60,2700,0,3232,2631,1000,2500,10};
         size_t maxSeekDecodes=0;
         for(int index:seeks) {
             const auto before=movie.statistics().decodes;movie.seek((index+.25)/30.);
             const size_t count=std::size_t(movie.statistics().decodes-before);maxSeekDecodes=std::max(maxSeekDecodes,count);
             require(count<=30&&movie.sourceFrame()==index+3&&sha.hash(movie.pixels()->rgba)==expected.at(index+3),"Backward/random seek reconstruction differs");
             require(movie.takeEffects().empty(),"Seek replayed historical sound events");
-            if(index==longestEnd)require(count==std::size_t(longest+1),"Longest delta seek did not use its key plus delta chain");
-            if(index==keyAfterDelta)require(count==1,"Key transition seek decoded preceding frames");
+            if(version==1&&index==longestEnd)require(count==std::size_t(longest+1),"Longest delta seek did not use its key plus delta chain");
+            if(version==1&&index==keyAfterDelta)require(count==1,"Key transition seek decoded preceding frames");
         }
         movie.seek((2633-3+.25)/30.);require(movie.sourceFrame()==2633,"Pre-event seek frame differs");
         movie.advance((2634-3+.25)/30.);auto pair=movie.takeEffects();
@@ -147,22 +152,36 @@ int main(int argc,char** argv) {
         require(pair.size()==events.size()&&movie.finished(),"Restart/clock catch-up dropped events");
         for(size_t i=0;i<pair.size();++i)require(pair[i].lexically_normal()==events[i].second,"Restart reordered sound events");
 
+        const auto codec=movie.statistics();
+        if(version==2)require(codec.codecDecodes>0&&codec.codecChunkLoads>0&&codec.maximumCodecRequestDecodes<=30,"Lossless codec seek budget differs");
         std::lock_guard decodeGuard(decodeMutex);
+        if(version==2)require(decoded==0&&decodeTimes.empty(),"Container playback opened individual PNG frames");
+        auto pngPercentile=[&](double fraction) {
+            if(decodeTimes.empty())return std::string("null");
+            std::ostringstream value;value<<std::setprecision(12)<<percentile(decodeTimes,fraction);return value.str();
+        };
         std::ofstream report(output/"checks.json");report<<std::setprecision(12)<<std::boolalpha;
         report<<"{\n  \"sourceFrames\":3233,\n  \"firstSourceFrame\":3,\n  \"lastSourceFrame\":3235,\n"
               <<"  \"allRgbaHashesMatch\":true,\n  \"sequentialDecodeCount\":"<<sequentialDecodes<<",\n"
               <<"  \"prefetchEnabled\":"<<prefetch<<",\n  \"configuredCacheFrames\":"<<(prefetch?8:0)<<",\n  \"actualDecoderCallsAtReport\":"<<decoded<<",\n"
               <<"  \"backwardAndRandomSeeks\":"<<seeks.size()<<",\n  \"maximumSeekDecodeCount\":"<<maxSeekDecodes<<",\n"
-              <<"  \"maximumConsecutiveDeltas\":"<<longest<<",\n  \"firstDeltaSourceFrame\":"<<table[std::size_t(firstDelta)].source<<",\n"
+              <<"  \"maximumConsecutiveDeltas\":"<<longest<<",\n  \"firstDeltaSourceFrame\":"<<(firstDelta>=0?table[std::size_t(firstDelta)].source:-1)<<",\n"
               <<"  \"sameFramePointerAndDecodeCountStable\":true,\n  \"eventCount\":19,\n  \"eventFramePathAndOrderMatch\":true,\n"
               <<"  \"doubleEvent2634OrderMatch\":true,\n  \"finishedAt3233Over30\":true,\n  \"restartAndCatchUpMatch\":true,\n"
-              <<"  \"sequentialVerificationMilliseconds\":"<<sequentialMs<<",\n  \"pngDecodeP50Milliseconds\":"<<percentile(decodeTimes,.5)<<",\n"
-              <<"  \"pngDecodeP95Milliseconds\":"<<percentile(decodeTimes,.95)<<",\n  \"pngDecodeMaxMilliseconds\":"<<percentile(decodeTimes,1)<<",\n"
+              <<"  \"sequentialVerificationMilliseconds\":"<<sequentialMs<<",\n  \"pngDecodeP50Milliseconds\":"<<pngPercentile(.5)<<",\n"
+              <<"  \"pngDecodeP95Milliseconds\":"<<pngPercentile(.95)<<",\n  \"pngDecodeMaxMilliseconds\":"<<pngPercentile(1)<<",\n"
               <<"  \"advanceP95Milliseconds\":"<<percentile(advanceTimes,.95)<<",\n  \"rasterBytes\":"<<maxRaster<<",\n"
               <<"  \"forwardDeltaWorkingRasterUpperBound\":3,\n  \"forwardDeltaWorkingPixelBytesUpperBound\":"<<maxRaster*3<<",\n"
-              <<"  \"measurementScope\":\"Prepared CPU PNG decode/copy/XOR only; hash verification timing is separate from decode percentiles. Not game FPS or a universal performance claim.\",\n"
-              <<"  \"memoryScope\":\"Three movie working pixel vectors; optional prefetch holds up to eight additional decoded/in-flight frames. Excludes codec scratch, metadata, GPU copies and extra shared consumers. Sequential/seek decode counts above are reconstruction requests, not worker I/O calls.\"\n}\n";
+              <<"  \"measurementScope\":\"Prepared CPU animation reconstruction. PNG percentiles are null for the container codec; advance timing includes cache waits. Hash verification and background worker decoding are separate. Not game FPS or a universal performance claim.\",\n"
+              <<"  \"memoryScope\":\"Conservative allowance of three movie working pixel vectors; optional prefetch holds up to eight additional decoded/in-flight frames. Excludes libwebp decoder canvases/scratch and its compressed chunk, metadata, GPU copies and extra shared consumers. Sequential/seek decode counts above are reconstruction requests, not worker I/O calls.\"\n}\n";
         require(bool(report),"Cannot write intro verification report");
+        std::ofstream extra(output/"codec-checks.json");
+        extra<<std::boolalpha<<"{\n  \"frameTableVersion\": "<<version<<",\n  \"individualPngDecoderCalls\": "<<decoded
+             <<",\n  \"codecVisualFramesDecoded\": "<<codec.codecDecodes<<",\n  \"codecChunksLoaded\": "<<codec.codecChunkLoads
+             <<",\n  \"maximumCodecDecodesPerRequest\": "<<codec.maximumCodecRequestDecodes
+             <<",\n  \"maximumCompressedChunkBytes\": "<<codec.maximumCompressedChunkBytes
+             <<",\n  \"all3233RgbaHashesEventsAndClockPassed\": true\n}\n";
+        require(bool(extra),"Cannot write codec verification report");
         std::cout<<"All 3233 native RGBA hashes, bounded seeks, nineteen events and finish clock passed\n";
         return 0;
     }catch(const std::exception& error) {std::cerr<<error.what()<<'\n';return 1;}

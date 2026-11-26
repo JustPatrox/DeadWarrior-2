@@ -1,5 +1,6 @@
 #include "intro_movie.hpp"
 #include "intro_frame_cache.hpp"
+#include "chunk_movie.hpp"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -17,20 +18,33 @@ IntroMovie::IntroMovie(const std::filesystem::path& directory,Decoder decoder,bo
     std::ifstream input(directory/"frames.tsv");
     if(!input)return; // Older prepared resource sets can still enter the campaign.
     std::string title,music;int version{},count{},last{};
-    if(!(input>>title>>version) || title!="DeadWarrior2-Intro" || version!=1 ||
+    if(!(input>>title>>version) || title!="DeadWarrior2-Intro" || (version!=1&&version!=2) ||
        !(input>>width_>>height_>>rate_>>count>>first_>>last) ||
        width_<1 || height_<1 || width_>4096 || height_>4096 || rate_!=30 ||
        count<1 || count>20000 || first_<1 || last-first_+1!=count || !(input>>music))
         throw std::runtime_error("Invalid intro frame header");
     music_=relativeFile(music);
-    int key=-1;
-    for(int i=0;i<count;++i) {
-        int source{};char kind{};std::string file;
-        if(!(input>>source>>kind>>file) || source!=first_+i || (kind!='K' && kind!='D'))
-            throw std::runtime_error("Invalid intro frame row");
-        if(kind=='K')key=i;
-        if(key<0 || i-key>=30)throw std::runtime_error("Intro key frame interval exceeds its bound");
-        frames_.push_back({kind=='K',relativeFile(file),key});
+    if(version==2) {
+        std::string file;if(!(input>>file))throw std::runtime_error("Missing intro animation container");
+        auto movie=std::make_shared<ChunkMovie>(relativeFile(file));
+        if(movie->width()!=std::uint32_t(width_)||movie->height()!=std::uint32_t(height_)||movie->rate()!=std::uint32_t(rate_)||
+           movie->count()!=std::uint32_t(count)||movie->firstSource()!=std::uint32_t(first_))
+            throw std::runtime_error("Intro animation container differs from its manifest");
+        chunkMovie_=movie;
+        // Virtual numeric keys keep the existing bounded frame-cache contract;
+        // no individual image files are opened by this decoder.
+        decode_=[movie](const std::filesystem::path& key){return movie->frame(std::uint32_t(std::stoul(key.filename().string())));};
+        for(int i=0;i<count;++i)frames_.push_back({true,directory_/std::to_string(i),i});
+    } else {
+        int key=-1;
+        for(int i=0;i<count;++i) {
+            int source{};char kind{};std::string file;
+            if(!(input>>source>>kind>>file) || source!=first_+i || (kind!='K' && kind!='D'))
+                throw std::runtime_error("Invalid intro frame row");
+            if(kind=='K')key=i;
+            if(key<0 || i-key>=30)throw std::runtime_error("Intro key frame interval exceeds its bound");
+            frames_.push_back({kind=='K',relativeFile(file),key});
+        }
     }
     std::string trailing;if(input>>trailing)throw std::runtime_error("Unexpected intro frame data");
     std::ifstream events(directory/"events.tsv");
@@ -42,6 +56,16 @@ IntroMovie::IntroMovie(const std::filesystem::path& directory,Decoder decoder,bo
     if(events.is_open() && !events.eof())throw std::runtime_error("Invalid intro sound event row");
 }
 IntroMovie::~IntroMovie()=default;
+IntroMovie::Statistics IntroMovie::statistics() const {
+    auto result=statistics_;
+    if(chunkMovie_) {
+        const auto codec=chunkMovie_->statistics();
+        result.codecDecodes=codec.decodes;result.codecChunkLoads=codec.chunkLoads;
+        result.maximumCodecRequestDecodes=codec.maximumRequestDecodes;
+        result.maximumCompressedChunkBytes=codec.maximumCompressedBytes;
+    }
+    return result;
+}
 void IntroMovie::decodeFrame(int target) {
     if(target==current_ && pixels_)return;
     const auto start=std::chrono::steady_clock::now();
