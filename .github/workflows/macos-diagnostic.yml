@@ -34,8 +34,20 @@ jobs:
       - name: Build installed app
         run: |
           cmake -S . -B build/native -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-          cmake --build build/native --parallel 3 --target DeadWarrior2
+          cmake --build build/native --parallel 3 --target DeadWarrior2 sdl_window_probe
           cmake --install build/native --prefix out/package
+      - name: Capture minimal hidden window controls
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          Path('out/checks').mkdir(parents=True, exist_ok=True)
+          for control in range(7):
+              result=subprocess.run(['build/native/sdl_window_probe',str(control)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
+              text=f'control={control} returnCode={result.returncode}\n'+result.stdout.decode(errors='replace')
+              Path(f'out/checks/window-control-{control}.log').write_text(text)
+              print(text,flush=True)
+          PY
       - name: Capture native startup
         env:
           SDL_AUDIO_DRIVER: dummy

@@ -31,6 +31,9 @@ set_target_properties(DeadWarrior2 PROPERTIES OUTPUT_NAME "DeadWarrior 2"
     MACOSX_BUNDLE_BUNDLE_VERSION "0.0.${DW2_BUNDLE_BUILD}"
     MACOSX_BUNDLE_INFO_STRING "DeadWarrior 2 ${DW2_RELEASE_VERSION}")
 if(APPLE)
+    enable_language(OBJCXX)
+    add_executable(sdl_window_probe EXCLUDE_FROM_ALL tools/check_macos_window.mm)
+    target_link_libraries(sdl_window_probe PRIVATE SDL3::SDL3-static "-framework Cocoa")
     set(resource_dir "DeadWarrior 2.app/Contents/Resources")
     install(TARGETS DeadWarrior2 BUNDLE DESTINATION .)
 else()
