@@ -156,7 +156,11 @@ void SdlRenderer::draw(const std::vector<Draw>& draws,int w,int h) {
     }
     SDL_SetRenderClipRect(renderer_,nullptr);
 }
-void SdlRenderer::picture(const std::filesystem::path& file,Rect r,const Viewport& v) {const auto dst=rect(r,v);SDL_RenderTexture(renderer_,image(file),nullptr,&dst);}
+void SdlRenderer::picture(const std::filesystem::path& file,Rect r,const Viewport& v,double alpha) {
+    const auto dst=rect(r,v);auto* texture=image(file);
+    SDL_SetTextureAlphaModFloat(texture,float(alpha));SDL_RenderTexture(renderer_,texture,nullptr,&dst);
+    SDL_SetTextureAlphaModFloat(texture,1);
+}
 void SdlRenderer::png(const std::filesystem::path& file) {
     auto surface=SDL_RenderReadPixels(renderer_,nullptr);
     if(!surface) throw std::runtime_error(SDL_GetError());

@@ -34,10 +34,12 @@ void checkDirectRaster() {
         // Two frames share one decoded page. Changing only UV must invalidate
         // both the composite signature and the sampled-image cache.
         std::ofstream(menu/"textures.tsv")<<"1 1 sheet.png 0 0 1 1 .25 0 .25 1\n"
-            <<"1 2 sheet.png 0 0 1 1 .75 0 .25 1\n"<<"2 1 single.png 0 0 1 1\n";
+            <<"1 2 sheet.png 0 0 1 1 .75 0 .25 1\n"<<"2 1 single.png 0 0 1 1\n"
+            <<"3 1 faint.png 0 0 1 1\n";
         MenuAssets sheets(menu);int pageDecodes=0;
         auto decoder=[&](const std::filesystem::path& file) {
             if(file.filename()=="single.png")return Raster{1,1,{231,17,9,255}};
+            if(file.filename()=="faint.png")return Raster{1,1,{231,17,9,1}};
             ++pageDecodes;return Raster{4,1,{231,17,9,255,231,17,9,255,7,29,213,255,7,29,213,255}};
         };
         RasterCompositor atlas(sheets,decoder),single(sheets,decoder);
@@ -54,6 +56,31 @@ void checkDirectRaster() {
         const auto uv=textureRegion(sheets.texture(1,1),Rect{.25,0,.5,1});
         if(uv.x!=.3125 || uv.w!=.125 || uv.y!=0 || uv.h!=1)
             throw std::runtime_error("Sprite sheet crop composition failed");
+        // Different castle layers/frames in one physical sheet must not evict
+        // one another's scaled samples on every animated composite.
+        Draw layer{1,1,{0,0,1,1}},other{1,2,{1,0,1,1}};
+        auto reference=atlas.image(Draw::group({layer,other},{0,0}));
+        const auto built=atlas.sampleBuilds();
+        for(int frame=0;frame<60;++frame) {
+            auto changing=other;changing.alpha=frame%2 ? .5 : 1;
+            const auto image=atlas.image(Draw::group({layer,changing},{0,0}));
+            if(frame%2==0 && image->rgba!=reference->rgba)
+                throw std::runtime_error("Shared-sheet sample reuse changed castle pixels");
+        }
+        if(atlas.sampleBuilds()!=built)
+            throw std::runtime_error("Shared-sheet layers repeatedly rebuilt unchanged scaled samples");
+        // Bilinear sampling can leave RGB nonzero while its tiny alpha rounds
+        // to zero. A first-layer copy must retain blendPixel's zero-alpha skip.
+        Draw faint{3,1,{.49,.49,1,1}};
+        const auto invisible=atlas.image(Draw::group({faint},{0,0}));
+        if(invisible->width!=2 || invisible->height!=2 ||
+           std::any_of(invisible->rgba.begin(),invisible->rgba.end(),[](auto value){return value!=0;}))
+            throw std::runtime_error("Zero rounded alpha copied hidden RGB into the composite");
+        // The same skip also applies after per-layer opacity is rounded.
+        faint.target={0,0,1,1};faint.alpha=.1;
+        const auto faded=atlas.image(Draw::group({faint},{0,0}));
+        if(faded->rgba!=std::vector<std::uint8_t>({0,0,0,0}))
+            throw std::runtime_error("Layer opacity copied zero-alpha RGB into the composite");
     } catch(...) {
         // Remove only the four exact paths created by this fixture.
         for(const char* name:{"textures.tsv","placements.tsv","alpha.tsv"})std::filesystem::remove(menu/name);

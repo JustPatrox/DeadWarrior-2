@@ -5,6 +5,7 @@
 #include "pause_menu.hpp"
 #include "work_in_progress.hpp"
 #include "intro_movie.hpp"
+#include "startup_splash.hpp"
 #include <SDL3/SDL_main.h>
 #include <algorithm>
 #include <chrono>
@@ -246,7 +247,14 @@ public:
         }
         SDL_SetRenderTarget(native,buffer_);
         std::vector<Draw> draws;
-        if(notice_) draws.push_back(Draw::label({Viewport::left+20,210,Viewport::width-40,55},"This project is not affiliated with",30,0xffffff,true));
+        const auto splash=startupSplash(startupDuration-std::chrono::duration<double>(noticeEnd_-Clock::now()).count());
+        const double logoWidth=splash.engine ? 480 : 372;
+        const double logoHeight=logoWidth*(splash.engine ? 442./1014 : 52./380);
+        const double splashTop=(Viewport::height-38-16-logoHeight)/2;
+        if(notice_) {
+            auto label=Draw::label({Viewport::left, splashTop,Viewport::width,38},splash.engine ? "Powered by" : "This project is not affiliated with",24,0xffffff,true);
+            label.alpha=splash.alpha;draws.push_back(std::move(label));
+        }
         else if(wip_) draws=wip_->drawList();else if(campaign_) draws=campaign_->drawList();else draws=battle_ ? battle_->drawList() : menu_.drawList();
         if(pause_.isOpen()&&!display_.isOpen()) {
             auto panel=pause_.drawList(audio_.soundEnabled(),audio_.musicEnabled());
@@ -262,11 +270,15 @@ public:
         }
         if(display_.showFps()&&!notice_) draws.push_back(Draw::label({Viewport::left+16,12,120,24},"FPS: "+std::to_string(int(std::lround(fps_))),17,0x8dff8d));
         display_.append(draws);renderer_.draw(draws,w,h);
-        if(notice_) renderer_.picture(assetsDir_/"branding/max-games.png",{235,315,380,52},Viewport(w,h));
+        if(notice_) renderer_.picture(assetsDir_/(splash.engine ? "branding/stick-engine-2.png" : "branding/max-games.png"),
+            {425-logoWidth/2,splashTop+54,logoWidth,logoHeight},Viewport(w,h),splash.alpha);
         if(!snapshot.empty()) renderer_.png(snapshot);
         SDL_SetRenderTarget(native,nullptr);SDL_SetRenderDrawColor(native,0,0,0,255);SDL_RenderClear(native);SDL_RenderTexture(native,buffer_,nullptr,nullptr);SDL_RenderPresent(native);
     }
     int run() {
+        noticeEnd_=Clock::now()+std::chrono::seconds(3);
+        int firstW,firstH;SDL_GetRenderOutputSize(renderer_.native(),&firstW,&firstH);
+        draw(firstW,firstH);SDL_ShowWindow(window_);
         auto deadline=Clock::now(),frameDeadline=deadline,countStart=deadline;int count=0;
         while(running_) {
             SDL_Event event;
@@ -301,7 +313,8 @@ public:
                 int w,h;SDL_GetRenderOutputSize(renderer_.native(),&w,&h);if(w>0&&h>0) draw(w,h);
                 const bool cursor=battle_&&!pause_.isOpen()&&!display_.isOpen()&&battle_->cursorSymbol();if(cursor) SDL_HideCursor();else SDL_ShowCursor();
                 ++count;if(now-countStart>=std::chrono::seconds(1)) {fps_=count/std::chrono::duration<double>(now-countStart).count();count=0;countStart=now;}
-                frameDeadline=now+std::chrono::nanoseconds(display_.frameLimit() ? 1'000'000'000/display_.frameLimit() : 0);
+                const int limit=notice_ ? 60 : display_.frameLimit();
+                frameDeadline=now+std::chrono::nanoseconds(limit ? 1'000'000'000/limit : 0);
             } else SDL_Delay(1);
         }
         return 0;
@@ -478,13 +491,14 @@ int main(int argc,char** argv) {
         }
         if(saveDir.empty()) {char* pref=SDL_GetPrefPath("JustPatrox","DeadWarrior 2");if(!pref) throw std::runtime_error(SDL_GetError());saveDir=pref;SDL_free(pref);}
         fs::create_directories(saveDir);
-        SDL_Window* window=SDL_CreateWindow("DeadWarrior 2",1280,720,SDL_WINDOW_RESIZABLE|SDL_WINDOW_HIGH_PIXEL_DENSITY);
+        SDL_Window* window=SDL_CreateWindow("DeadWarrior 2",1280,720,SDL_WINDOW_RESIZABLE|SDL_WINDOW_HIGH_PIXEL_DENSITY|SDL_WINDOW_HIDDEN);
         if(!window) throw std::runtime_error(SDL_GetError());
         if(test) SDL_Log("SMOKE native window created");
         const auto windowGuard=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(window,SDL_DestroyWindow);
         SDL_SetWindowMinimumSize(window,640,360);
         if(test) SDL_Log("SMOKE constructing application");
         Application app(window,root,saveDir);
+        if(test) SDL_ShowWindow(window);
         if(test) SDL_Log("SMOKE application ready");
         if(test) {app.selfTest(testDir);result=0;}else result=app.run();
     } catch(const std::exception& error) {

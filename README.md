@@ -31,6 +31,8 @@ The downloads are **native, ready-to-play ports**, with prepared assets included
 
 This project is not affiliated with Max Games or the original game's creators. See [credits and third-party content](NOTICE.md).
 
+DeadWarrior 2 shares its 2D geometry and RGBA blending code with [Stick Engine 2](https://github.com/JustPatrox/Stick-Engine-2). The standalone SDK supports custom sprite sheets and code-driven animation.
+
 ## Current status
 
 **Development build: the full campaign has not been ported yet.** Ten missions are accessible, through Crawlers Attack. Unimplemented sections display a work-in-progress screen with restart and quit options.

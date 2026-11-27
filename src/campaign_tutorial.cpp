@@ -387,7 +387,10 @@ void CampaignTutorial::updateUnit(Unit& u) {
         else if(++u.frame>=end) {u.inBlock=false;u.frame=2;}
         return;
     }
-    u.frame=u.frame>=end ? 2 : u.frame+1;
+    // swordwrath_392.frame150 immediately jumps to frame60. Its opening
+    // idle gesture plays once; only the authored tail repeats while standing.
+    if(u.symbol==sword && u.pose=="stand" && u.frame==end-1)u.frame=60;
+    else u.frame=u.frame>=end ? 2 : u.frame+1;
     if (mission_ && u.symbol==sword && attacking && u.rageCounter<rules_.at("rage.effect"))
         u.frame=std::min(end,u.frame+1);
 }

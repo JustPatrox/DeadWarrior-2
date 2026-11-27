@@ -6,6 +6,8 @@ The Stick War 2 name, characters, levels, artwork, music, sound effects, and oth
 
 The DeadWarrior 2 logo and helmet icon were supplied by the project owner. The supplied Max Games logo is retained for the startup non-affiliation notice.
 
+Stick Engine 2 provides geometry and pixel blending used by the native port. The corresponding headers carry the [Stick Engine 2 MIT license](third_party/stick-engine-2/LICENSE). The Stick Engine 2 logo was supplied by the project owner.
+
 Preparation dependencies — JPEXS FFDec, Java, Pillow, NumPy, JPype, and imageio-ffmpeg — are obtained separately and retain their own licenses.
 
 A distribution license for this project's code has not yet been selected. This notice does not apply a new license to original game resources or trademarks.

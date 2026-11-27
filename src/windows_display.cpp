@@ -177,8 +177,10 @@ void DisplaySettings::setMode(HWND hwnd,Mode next) {
     MONITORINFO monitor{sizeof(MONITORINFO)};
     GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&monitor);
     RECT r=monitor.rcMonitor;
-    SetWindowLongPtrW(hwnd,GWL_STYLE,WS_POPUP|WS_VISIBLE);
-    SetWindowPos(hwnd,HWND_TOP,r.left,r.top,r.right-r.left,r.bottom-r.top,SWP_FRAMECHANGED);
+    const auto visible=GetWindowLongPtrW(hwnd,GWL_STYLE)&WS_VISIBLE;
+    SetWindowLongPtrW(hwnd,GWL_STYLE,WS_POPUP|visible);
+    SetWindowPos(hwnd,HWND_TOP,r.left,r.top,r.right-r.left,r.bottom-r.top,
+                 SWP_FRAMECHANGED|(visible ? 0 : SWP_NOACTIVATE));
 }
 
 void DisplaySettings::apply(HWND hwnd,int choice) {

@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <dwmapi.h>
 #include <objidl.h>
 #include <gdiplus.h>
 #include <windowsx.h>
@@ -10,6 +11,7 @@
 #include "intro_movie.hpp"
 #include "windows_display.hpp"
 #include "windows_render.hpp"
+#include "startup_splash.hpp"
 #include "windows_save.hpp"
 #include "windows_audio.hpp"
 #include "windows_log.hpp"
@@ -208,9 +210,11 @@ class Window {
     DisplaySettings display_;
     std::ofstream frameTiming_;
     gd::Bitmap studioLogo_;
+    gd::Bitmap engineLogo_;
     static constexpr auto noticeDuration = std::chrono::seconds(3);
     bool showingNotice_{true};
     Clock::time_point noticeEnd_{};
+    bool firstPresentation_{true};
     HWND hwnd_{};
     bool diagnostic_{},forceSoftware_{};
     std::unique_ptr<gd::Bitmap> buffer_;
@@ -531,20 +535,26 @@ class Window {
         g.SetPageUnit(gd::UnitPixel);
         const float scale=float(Viewport(w,h).scale);
         const float cx=w*0.5f, cy=h*0.5f;
-        const float logoWidth=372*scale;
-        const float logoHeight=logoWidth*studioLogo_.GetHeight()/studioLogo_.GetWidth();
+        if (firstPresentation_) return; // The initial redirected surface is entirely black.
+        const auto splash=startupSplash(startupDuration-std::chrono::duration<double>(noticeEnd_-Clock::now()).count());
+        auto& logo=splash.engine ? engineLogo_ : studioLogo_;
+        const float logoWidth=(splash.engine ? 480 : 372)*scale;
+        const float logoHeight=logoWidth*logo.GetHeight()/logo.GetWidth();
         const float lineHeight=38*scale, gap=16*scale;
         const float top=cy-(lineHeight+gap+logoHeight)*0.5f;
-        gd::Font font(L"Segoe UI",24*scale,gd::FontStyleRegular,gd::UnitPixel);
+        gd::Font font(L"Segoe UI",24*scale,splash.engine ? gd::FontStyleBold : gd::FontStyleRegular,gd::UnitPixel);
         gd::StringFormat format;
         format.SetAlignment(gd::StringAlignmentCenter);
         format.SetLineAlignment(gd::StringAlignmentCenter);
-        gd::SolidBrush ink(gd::Color(255,242,242,242));
+        gd::SolidBrush ink(gd::Color(BYTE(std::lround(splash.alpha*255)),242,242,242));
         g.SetTextRenderingHint(gd::TextRenderingHintAntiAliasGridFit);
-        g.DrawString(L"This project is not affiliated with",-1,&font,
+        g.DrawString(splash.engine ? L"Powered by" : L"This project is not affiliated with",-1,&font,
                      gd::RectF(0,top,float(w),lineHeight),&format,&ink);
         g.SetInterpolationMode(gd::InterpolationModeHighQualityBicubic);
-        g.DrawImage(&studioLogo_,gd::RectF(cx-logoWidth/2,top+lineHeight+gap,logoWidth,logoHeight));
+        gd::ColorMatrix matrix={1,0,0,0,0, 0,1,0,0,0, 0,0,1,0,0, 0,0,0,float(splash.alpha),0, 0,0,0,0,1};
+        gd::ImageAttributes attributes;attributes.SetColorMatrix(&matrix);
+        g.DrawImage(&logo,gd::RectF(cx-logoWidth/2,top+lineHeight+gap,logoWidth,logoHeight),
+            0,0,float(logo.GetWidth()),float(logo.GetHeight()),gd::UnitPixel,&attributes);
     }
     std::vector<Draw> scene() const {
         RECT client{};GetClientRect(hwnd_,&client);display_.configureViewport(client.right,client.bottom);
@@ -689,7 +699,13 @@ class Window {
     }
     LRESULT message(UINT msg,WPARAM w,LPARAM l) {
         switch (msg) {
-        case WM_ERASEBKGND: return 1;
+        case WM_ERASEBKGND:
+            if (firstPresentation_) {
+                RECT area{};
+                GetClientRect(hwnd_,&area);
+                FillRect(reinterpret_cast<HDC>(w),&area,static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+            }
+            return 1;
         case WM_SETCURSOR:
             if (LOWORD(l)==HTCLIENT && tutorial_ && !display_.isOpen() && !pause_.isOpen()) {
                 SetCursor(tutorial_->cursorSymbol() ? nullptr : LoadCursorW(nullptr,IDC_ARROW));
@@ -940,7 +956,7 @@ class Window {
         const std::unique_ptr<void,decltype(&CloseHandle)> timer(handle,CloseHandle);
         gameDeadline_=noticeEnd_;
         auto frameDeadline=Clock::now();
-        int frameLimit=display_.frameLimit();
+        int frameLimit=showingNotice_ ? 60 : display_.frameLimit();
         while (true) {
             MSG msg{};
             // Give the clocks a turn even if the input queue stays busy.
@@ -954,11 +970,12 @@ class Window {
             advanceSimulation(Clock::now());
             const auto now=Clock::now();
             if (now>=gameDeadline_) continue;
-            if (frameLimit!=display_.frameLimit()) {
-                frameLimit=display_.frameLimit();
+            const int requestedLimit=showingNotice_ ? 60 : display_.frameLimit();
+            if (frameLimit!=requestedLimit) {
+                frameLimit=requestedLimit;
                 frameDeadline=now;
             }
-            const bool renderable=!showingNotice_ && !IsIconic(hwnd_);
+            const bool renderable=!IsIconic(hwnd_);
             if (renderable && (!frameLimit || now>=frameDeadline)) {
                 if (frameLimit) {
                     const auto interval=std::chrono::nanoseconds(1'000'000'000/frameLimit);
@@ -989,9 +1006,11 @@ public:
         :directory_(dir),saveDirectory_(saveDir),capturePath_(capture),saved_(loadProgress(saveDir)),assets_(assets),
          menu_(assets,saved_.has_value()),soundPlayer_(dir.parent_path()/"audio",logEvent),
          intro_(dir.parent_path()/"intro",loadWindowsPng,true),renderer_(assets),hardware_(assets),
-         studioLogo_((dir.parent_path()/"branding/max-games.png").c_str()),diagnostic_(diagnostic),forceSoftware_(software) {
+         studioLogo_((dir.parent_path()/"branding/max-games.png").c_str()),
+         engineLogo_((dir.parent_path()/"branding/stick-engine-2.png").c_str()),diagnostic_(diagnostic),forceSoftware_(software) {
         logEvent("SAVE directory="+saveDir.string()+" valid="+std::to_string(saved_.has_value()));
         if (studioLogo_.GetLastStatus()!=gd::Ok) throw std::runtime_error("Cannot load Max Games logo");
+        if (engineLogo_.GetLastStatus()!=gd::Ok) throw std::runtime_error("Cannot load Stick Engine 2 logo");
         if (!trace.empty()) tutorialTrace_.open(trace);
         if (!frameTiming.empty()) {
             frameTiming_.open(frameTiming);
@@ -1004,6 +1023,7 @@ public:
         WNDCLASSEXW wc{sizeof(WNDCLASSEXW)};
         wc.hInstance=instance; wc.lpfnWndProc=dispatch; wc.lpszClassName=L"DeadWarrior2Native";
         wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
+        wc.hbrBackground=static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
         auto icon=[&](int width,int height) {
             return static_cast<HICON>(LoadImageW(instance,MAKEINTRESOURCEW(IDI_DEADWARRIOR),IMAGE_ICON,
                                                 GetSystemMetrics(width),GetSystemMetrics(height),LR_SHARED));
@@ -1020,8 +1040,21 @@ public:
         logEvent(std::string("OPTIONS load=")+(loaded ? "ok" : "defaults-or-partial")+" file="+(saveDirectory_/L"options.ini").string());
         display_.restore(hwnd_);
         saveOptions();
+        // Keep the window off the desktop until its redirected client surface
+        // contains a complete frame. This covers the first visible refresh
+        // when restoring a borderless or fullscreen window as well.
+        BOOL cloak=TRUE;
+        const bool cloaked=SUCCEEDED(DwmSetWindowAttribute(hwnd_,DWMWA_CLOAK,&cloak,sizeof(cloak)));
         ShowWindow(hwnd_,capturePath_.empty() ? SW_SHOW : SW_SHOWNOACTIVATE);
-        UpdateWindow(hwnd_);
+        InvalidateRect(hwnd_,nullptr,FALSE);UpdateWindow(hwnd_);
+        GdiFlush();
+        if (cloaked) {
+            DwmFlush();
+            cloak=FALSE;
+            if (FAILED(DwmSetWindowAttribute(hwnd_,DWMWA_CLOAK,&cloak,sizeof(cloak))))
+                throw std::runtime_error("Cannot reveal the prepared game window");
+        }
+        firstPresentation_=false;
         noticeEnd_=Clock::now()+noticeDuration;
         const int result=messageLoop();
         soundPlayer_.stopMusic();

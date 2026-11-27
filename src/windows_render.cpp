@@ -119,6 +119,8 @@ struct HardwareRenderer::Device {
     ComPtr<ID2D1HwndRenderTarget> target;
     ComPtr<ID2D1SolidColorBrush> brush;
     std::map<std::pair<std::filesystem::path,int>,Texture> textures;
+    using Prediction=std::tuple<int,int,int>; // Symbol, logical frame, authored tint.
+    std::set<Prediction> previousPredictions,currentPredictions;
     std::map<std::pair<double,bool>,ComPtr<IDWriteTextFormat>> formats;
     size_t textureBytes{};
     unsigned frame{};
@@ -138,6 +140,7 @@ struct HardwareRenderer::Device {
     void discardTarget() {
         compositeBitmap.Reset();compositePixels.reset();
         textures.clear();
+        previousPredictions.clear();currentPredictions.clear();
         textureBytes=0;
         brush.Reset();
         target.Reset();
@@ -214,6 +217,11 @@ struct HardwareRenderer::Device {
         case 7388:case 7519:case 7525:case 7514:break;
         default:return;
         }
+        // Simulation poses run at 30 Hz. Repainting the same pose (or drawing
+        // another instance) does not need another eight-frame asset scan.
+        // Keep only two visible passes, and invalidate on GPU eviction/reset.
+        const Prediction prediction{d.symbol,d.frame,d.redOffset};
+        if(!currentPredictions.insert(prediction).second || previousPredictions.contains(prediction))return;
         int next=d.frame;
         for(int i=0;i<8;++i) {
             auto found=assets.art.find({d.symbol,++next});
@@ -236,6 +244,7 @@ struct HardwareRenderer::Device {
         for (auto it:candidates) {
             textureBytes-=it->second.bytes;
             textures.erase(it);
+            previousPredictions.clear();currentPredictions.clear();
             ++evictions;
             if (textureBytes<=budget) break;
         }
@@ -306,6 +315,7 @@ bool HardwareRenderer::draw(HWND hwnd,int w,int h,const std::vector<Draw>& draws
                                                            float(view.pixels.y));
     auto* target=d.target.Get();
     ++d.frame;
+    d.previousPredictions.swap(d.currentPredictions);d.currentPredictions.clear();
     target->BeginDraw();
     target->SetTransform(stage);
     target->Clear(D2D1::ColorF(diagnostic ? 0xff00ff : 0x000000));

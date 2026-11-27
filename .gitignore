@@ -10,11 +10,12 @@
 *.as3
 
 # The original game's assets are generated locally from the user's SWF.
-# Only the supplied affiliation logo is part of the source repository.
+# Supplied startup logos are part of the source repository.
 /assets/*
 !/assets/branding/
 /assets/branding/*
 !/assets/branding/max-games.png
+!/assets/branding/stick-engine-2.png
 
 # Saves, logs and diagnostics
 *.sav

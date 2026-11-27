@@ -20,35 +20,8 @@ Draw Draw::group(std::vector<Draw> list,Point origin) {
     Draw result;result.target={origin.x+left,origin.y+top,right-left,bottom-top};
     result.children=std::make_shared<const std::vector<Draw>>(std::move(list));return result;
 }
-void blendPixel(std::uint8_t* d,const std::uint8_t* s,Draw::Blend mode) {
-    if(!s[3]) return;
-    if(!d[3]) {std::copy_n(s,4,d);return;}
-    if(mode==Draw::Blend::Normal && s[3]==255) {std::copy_n(s,4,d);return;}
-    if(d[3]==255) {
-        const int alpha=s[3];
-        for(int c=0;c<3;++c) {
-            const int cs=s[c],cb=d[c];int value=cs;
-            if(mode==Draw::Blend::Add) {d[c]=std::uint8_t(std::min(255,cb+(cs*alpha+127)/255));continue;}
-            if(mode==Draw::Blend::Overlay) value=cb<=127 ? (2*cs*cb+127)/255 : 255-(2*(255-cs)*(255-cb)+127)/255;
-            else if(mode==Draw::Blend::Screen) value=255-((255-cs)*(255-cb)+127)/255;
-            d[c]=std::uint8_t((value*alpha+cb*(255-alpha)+127)/255);
-        }
-        return;
-    }
-    const double a=s[3]/255.,b=d[3]/255.;
-    const double out=mode==Draw::Blend::Add ? std::min(1.,a+b) : a+b*(1-a);
-    for(int c=0;c<3;++c) {
-        const double cs=s[c]/255.,cb=d[c]/255.;double premult;
-        if(mode==Draw::Blend::Add) premult=std::min(1.,cs*a+cb*b);
-        else {
-            double blended=cs;
-            if(mode==Draw::Blend::Overlay) blended=cb<=.5 ? 2*cs*cb : 1-2*(1-cs)*(1-cb);
-            else if(mode==Draw::Blend::Screen) blended=1-(1-cs)*(1-cb);
-            premult=a*(1-b)*cs+a*b*blended+(1-a)*b*cb;
-        }
-        d[c]=std::uint8_t(std::clamp(std::lround(255*premult/out),0l,255l));
-    }
-    d[3]=std::uint8_t(std::clamp(std::lround(out*255),0l,255l));
+void blendPixel(std::uint8_t* destination, const std::uint8_t* source, Draw::Blend mode) {
+    stick::blend_rgba(destination, source, static_cast<stick::Blend>(mode));
 }
 namespace {
 void sample(const Raster& r,double x,double y,std::uint8_t* out,Rect clip) {
@@ -83,6 +56,7 @@ std::shared_ptr<const Raster> RasterCompositor::image(const Draw& group) {
     if(result->width<=0 || result->height<=0 || result->width>4096 || result->height>4096)
         throw std::runtime_error("Invalid original castle composite dimensions");
     result->rgba.resize(std::size_t(result->width)*result->height*4);++serial_;
+    bool emptyDestination=true;
     for(const auto& d:*group.children) {
         const auto& texture=assets_.texture(d.symbol,d.frame);
         const auto& file=texture.file;
@@ -91,34 +65,77 @@ std::shared_ptr<const Raster> RasterCompositor::image(const Draw& group) {
             auto image=decode_(file);bytes_+=image.rgba.size();Entry entry;entry.image=std::move(image);entry.used=serial_;
             found=images_.emplace(file,std::move(entry)).first;
         }
-        auto& entry=found->second;entry.used=serial_;const auto& src=entry.image;const Raster* raster=&src;
+        auto& entry=found->second;entry.used=serial_;const auto& src=entry.image;
         const auto uv=textureRegion(texture,d.source);
         const Rect region{uv.x*src.width,uv.y*src.height,uv.w*src.width,uv.h*src.height};
-        const double fx=d.target.x-std::floor(d.target.x),fy=d.target.y-std::floor(d.target.y);
-        if(entry.source!=raster || entry.x!=fx || entry.y!=fy || entry.w!=d.target.w || entry.h!=d.target.h ||
-           entry.region.x!=region.x || entry.region.y!=region.y || entry.region.w!=region.w || entry.region.h!=region.h) {
-            entry.source=raster;
-            entry.region=region;
-            bytes_-=entry.sampled.rgba.size();entry.x=fx;entry.y=fy;entry.w=d.target.w;entry.h=d.target.h;
-            auto& cache=entry.sampled;cache.width=int(std::ceil(fx+d.target.w));cache.height=int(std::ceil(fy+d.target.h));
+        const int originX=int(std::floor(d.target.x)),originY=int(std::floor(d.target.y));
+        const double fx=d.target.x-originX,fy=d.target.y-originY;
+        // A sheet contains several layers and poses. One scratch sample per
+        // physical PNG made those layers overwrite one another's cached work.
+        const SampleKey key{file,{fx,fy,d.target.w,d.target.h,region.x,region.y,region.w,region.h}};
+        auto cached=samples_.find(key);
+        if(cached==samples_.end()) {
+            Sample sampled;auto& cache=sampled.image;
+            cache.width=int(std::ceil(fx+d.target.w));cache.height=int(std::ceil(fy+d.target.h));
             cache.rgba.resize(size_t(cache.width)*cache.height*4);
             for(int y=0;y<cache.height;++y) for(int x=0;x<cache.width;++x)
                 sample(src,region.x+(x+.5-fx)*region.w/d.target.w-.5,region.y+(y+.5-fy)*region.h/d.target.h-.5,
                        cache.rgba.data()+4*(size_t(y)*cache.width+x),region);
-            bytes_+=cache.rgba.size();
+            // Keep the original sampled RGBA unchanged. In particular, a very
+            // small nonzero weighted alpha can round to zero while RGB stays
+            // nonzero. blendPixel ignores that pixel, so never copy it.
+            sampled.rows.resize(size_t(cache.height)+1);
+            for(int y=0;y<cache.height;++y) {
+                sampled.rows[size_t(y)]=sampled.spans.size();
+                const auto* row=cache.rgba.data()+4*size_t(y)*cache.width;
+                int x=0;
+                while(x<cache.width) {
+                    if(!row[4*size_t(x)+3]) {++x;continue;}
+                    const int begin=x;const bool opaque=row[4*size_t(x)+3]==255;
+                    do {++x;}while(x<cache.width && row[4*size_t(x)+3] && (row[4*size_t(x)+3]==255)==opaque);
+                    sampled.spans.push_back({begin,x,opaque});
+                }
+            }
+            sampled.rows[size_t(cache.height)]=sampled.spans.size();
+            bytes_+=sampled.storageBytes();
+            ++sampleBuilds_;cached=samples_.emplace(key,std::move(sampled)).first;
         }
-        const int left=std::max(0,int(std::floor(d.target.x))),top=std::max(0,int(std::floor(d.target.y)));
+        auto& cachedSample=cached->second;cachedSample.used=serial_;const auto& sampled=cachedSample.image;
+        const int left=std::max(0,originX),top=std::max(0,originY);
         const int right=std::min(result->width,int(std::ceil(d.target.x+d.target.w)));
         const int bottom=std::min(result->height,int(std::ceil(d.target.y+d.target.h)));
-        for(int y=top;y<bottom;++y) for(int x=left;x<right;++x) {
-            const auto* source=entry.sampled.rgba.data()+4*(size_t(y-int(std::floor(d.target.y)))*entry.sampled.width+x-int(std::floor(d.target.x)));
-            std::uint8_t rgba[4];if(d.alpha!=1) {std::copy_n(source,4,rgba);rgba[3]=std::uint8_t(std::clamp(std::lround(rgba[3]*d.alpha),0l,255l));source=rgba;}
-            blendPixel(result->rgba.data()+4*(std::size_t(y)*result->width+x),source,d.blend);
+        const double opacity=d.alpha;const auto mode=d.blend;
+        for(int y=top;y<bottom;++y) {
+            const auto row=size_t(y-originY);
+            const auto* sourceRow=sampled.rgba.data()+4*row*sampled.width;
+            auto* destinationRow=result->rgba.data()+4*size_t(y)*result->width;
+            for(auto index=cachedSample.rows[row];index<cachedSample.rows[row+1];++index) {
+                const auto& span=cachedSample.spans[index];
+                const int begin=std::max(span.begin,left-originX),end=std::min(span.end,right-originX);
+                if(begin>=end)continue;
+                const auto* source=sourceRow+4*size_t(begin);
+                auto* destination=destinationRow+4*size_t(originX+begin);
+                if(opacity==1 && (emptyDestination || (mode==Draw::Blend::Normal && span.opaque))) {
+                    std::copy_n(source,4*size_t(end-begin),destination);
+                } else if(opacity==1) {
+                    for(int x=begin;x<end;++x,source+=4,destination+=4)blendPixel(destination,source,mode);
+                } else {
+                    for(int x=begin;x<end;++x,source+=4,destination+=4) {
+                        std::uint8_t rgba[4];std::copy_n(source,4,rgba);
+                        rgba[3]=std::uint8_t(std::clamp(std::lround(rgba[3]*opacity),0l,255l));
+                        blendPixel(destination,rgba,mode);
+                    }
+                }
+            }
         }
+        emptyDestination=false;
     }
     constexpr std::size_t budget=128*1024*1024;
+    if(bytes_>budget) for(auto it=samples_.begin();it!=samples_.end() && bytes_>budget;) {
+        if(it->second.used!=serial_) {bytes_-=it->second.storageBytes();it=samples_.erase(it);}else ++it;
+    }
     if(bytes_>budget) for(auto it=images_.begin();it!=images_.end() && bytes_>budget;) {
-        if(it->second.used!=serial_) {bytes_-=it->second.image.rgba.size()+it->second.sampled.rgba.size();it=images_.erase(it);}else ++it;
+        if(it->second.used!=serial_) {bytes_-=it->second.image.rgba.size();it=images_.erase(it);}else ++it;
     }
     signature_=hash;last_=result;return last_;
 }

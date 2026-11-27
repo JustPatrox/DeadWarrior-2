@@ -1,5 +1,6 @@
 #include "campaign_menu.hpp"
 #include "raster_compositor.hpp"
+#include "startup_splash.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -29,6 +30,10 @@ static void settle(CampaignMenu& menu) {for(int i=0;i<100;++i)menu.tick();}
 static void click(CampaignMenu& menu,int id) {menu.press(id);menu.release(id);settle(menu);}
 int main(int argc,char** argv) {
     try {
+        require(!startupSplash(.75).engine && startupSplash(.75).alpha==1,"Affiliation splash hold failed");
+        require(startupSplash(2.25).engine && startupSplash(2.25).alpha==1,"Engine splash hold failed");
+        for(double t:{0.,1.5,3.})require(startupSplash(t).alpha==0,"Splash transition did not fade to black");
+        require(startupSplash(.11).alpha>.49 && startupSplash(.11).alpha<.51,"Splash fade-in clock failed");
         MenuAssets art((argc>1?std::filesystem::path(argv[1]):"assets")/"menu");
         for(auto mode:{Viewport::Aspect::Fixed,Viewport::Aspect::Stretched,Viewport::Aspect::Dynamic})
         for(auto size:{Point{1280,720},Point{1920,1080},Point{686,720},Point{720,1280},Point{2560,1080}})

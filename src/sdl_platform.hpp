@@ -46,7 +46,7 @@ public:
     void draw(const std::vector<Draw>&,int width,int height);
     int hit(const CampaignMenu&,Point stage);
     void png(const std::filesystem::path&);
-    void picture(const std::filesystem::path&,Rect,const Viewport&);
+    void picture(const std::filesystem::path&,Rect,const Viewport&,double alpha=1);
 };
 
 class SdlAudio {

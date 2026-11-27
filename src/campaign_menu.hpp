@@ -1,4 +1,6 @@
 #pragma once
+#include "../third_party/stick-engine-2/include/stick_engine/geometry.hpp"
+#include "../third_party/stick-engine-2/include/stick_engine/blend.hpp"
 
 #include <array>
 #include <filesystem>
@@ -13,13 +15,8 @@
 
 namespace sw2 {
 struct Raster;
-struct Point { double x{}, y{}; };
-struct Rect {
-    double x{}, y{}, w{}, h{};
-    bool contains(Point p) const {
-        return p.x >= x && p.y >= y && p.x < x+w && p.y < y+h;
-    }
-};
+using Point = stick::Point;
+using Rect = stick::Rect;
 
 struct Viewport {
     enum class Aspect { Fixed,Stretched,Dynamic };
@@ -80,7 +77,10 @@ struct Draw {
     double rotation{};
     int redOffset{};
     std::optional<Rect> source;
-    enum class Blend {Normal,Add,Overlay,Screen};
+    enum class Blend {
+        Normal = int(stick::Blend::normal), Add = int(stick::Blend::add),
+        Overlay = int(stick::Blend::overlay), Screen = int(stick::Blend::screen)
+    };
     Blend blend{Blend::Normal};
     std::shared_ptr<const std::vector<Draw>> children;
     static Draw group(std::vector<Draw>,Point origin);

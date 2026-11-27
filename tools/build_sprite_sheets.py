@@ -2,6 +2,7 @@
 
 Static symbols and background extension variants retain their original PNGs.
 The campaign/trailer SWFs are not read or modified by this conversion.
+Keep compact single-page groups; otherwise isolate symbols in timeline order.
 """
 import argparse
 from collections import defaultdict
@@ -28,6 +29,7 @@ PADDING = 2
 STANDARD_EDGE = 2048
 LARGE_EDGE = 4096
 LARGE_CELL_THRESHOLD = 1024
+COMPACT_SINGLE_PAGE_BUDGET = 8*1024*1024
 
 
 def sha256_file(path):
@@ -81,6 +83,8 @@ class Cell:
     height: int
     pixels_sha256: str
     first_row: int
+    symbol: int = 0
+    first_frame: int = 0
     files: list[str] = field(default_factory=list)
     page: int = -1
     x: int = 0
@@ -90,6 +94,7 @@ class Cell:
 @dataclass
 class Page:
     edge: int
+    symbol: int = 0
     shelves: list = field(default_factory=list)
     cells: list = field(default_factory=list)
     width: int = 0
@@ -120,12 +125,11 @@ class Page:
         return x, y
 
 
-def pack_cells(cells, timeline_order=False):
+def _pack_cells(cells, *, partition_by_symbol, timeline_order):
     pages = []
-    # Giant timelines benefit from adjacent poses sharing a page. Sorting every
-    # frame globally by size scattered their working set across unrelated pages.
-    ordered = sorted(cells, key=(lambda c: (c.first_row,c.file)) if timeline_order else
-                     (lambda c: (-max(c.width,c.height),-c.width*c.height,-c.height,-c.width,c.first_row,c.file)))
+    order = (lambda c: (c.symbol,c.first_frame,c.first_row,c.file)) if timeline_order else (
+        lambda c: (-max(c.width,c.height),-c.width*c.height,-c.height,-c.width,c.first_row,c.file))
+    ordered = sorted(cells, key=order)
     for cell in ordered:
         required = max(cell.width, cell.height)+PADDING*2
         # A large two-dimensional frame cannot share a 2048 page with a peer.
@@ -137,13 +141,27 @@ def pack_cells(cells, timeline_order=False):
             raise ValueError(f'Animated sprite needs an explicitly reviewed larger page: '
                              f'{cell.file} ({cell.width}x{cell.height} plus padding)')
         selected = next((i for i, page in enumerate(pages)
-                         if page.edge == edge and page.fit(cell) is not None), None)
+                         if (not partition_by_symbol or page.symbol == cell.symbol) and page.edge == edge
+                         and page.fit(cell) is not None), None)
         if selected is None:
             selected = len(pages)
-            pages.append(Page(edge))
+            pages.append(Page(edge,cell.symbol if partition_by_symbol else 0))
         cell.page = selected
         cell.x, cell.y = pages[selected].fit(cell, commit=True)
     return pages
+
+
+def pack_cells(cells):
+    # Model the existing dense layout first, still with separate cells for
+    # cross-symbol duplicates. Compact cursor/toolbar groups stay in one small
+    # resident page rather than expanding into many per-symbol textures.
+    compact = _pack_cells(cells,partition_by_symbol=False,timeline_order=False)
+    if len(compact)==1 and compact[0].width*compact[0].height*4 <= COMPACT_SINGLE_PAGE_BUDGET:
+        return compact,'compact-single-page'
+    # Larger working sets isolate symbols and keep first occurrences in frame
+    # order. This pass overwrites all temporary placements from the model.
+    pages = _pack_cells(cells,partition_by_symbol=True,timeline_order=True)
+    return pages,'one-symbol-per-page'
 
 
 def paste_extruded(atlas, image, x, y):
@@ -191,29 +209,37 @@ def convert_folder(source, output, name, backgrounds):
     animated_rows = {index for symbol in animated for index in by_symbol[symbol]}
     files = sorted({rows[index][2] for index in animated_rows})
     cells = []
-    by_file, by_pixels = {}, {}
-    file_first_row = {}
-    for index in sorted(animated_rows):
-        file_first_row.setdefault(rows[index][2], index)
+    by_row, by_pixels = {}, {}
+    symbol_files = set()
     source_details = {}
-    for name_in_manifest in files:
-        path = relative_file(folder, name_in_manifest)
-        image = rgba(path)
-        width, height = image.size
-        pixels = image.tobytes()
-        digest = pixel_hash(width, height, pixels)
-        source_details[name_in_manifest] = dict(width=width, height=height, rgbaSHA256=digest,
-                                               sourcePngSHA256=sha256_file(path), bytes=path.stat().st_size)
-        # Hashing includes dimensions and every RGBA byte, including transparent
-        # RGB values. The later decoded-output comparison verifies each row.
-        cell = by_pixels.get(digest)
-        if cell is None:
-            cell = Cell(name_in_manifest, width, height, digest, file_first_row[name_in_manifest])
-            cells.append(cell);by_pixels[digest] = cell
-        cell.files.append(name_in_manifest)
-        by_file[name_in_manifest] = cell
-        image.close()
-    pages = pack_cells(cells, timeline_order=name=="giants")
+    for symbol in sorted(animated):
+        for index in sorted(by_symbol[symbol],key=lambda i: int(rows[i][1])):
+            name_in_manifest = rows[index][2]
+            symbol_files.add((symbol,name_in_manifest))
+            detail = source_details.get(name_in_manifest)
+            if detail is None:
+                path = relative_file(folder, name_in_manifest)
+                image = rgba(path)
+                width, height = image.size
+                pixels = image.tobytes()
+                digest = pixel_hash(width, height, pixels)
+                detail = dict(width=width, height=height, rgbaSHA256=digest,
+                              sourcePngSHA256=sha256_file(path), bytes=path.stat().st_size)
+                source_details[name_in_manifest] = detail
+                image.close()
+            # Hash every RGBA byte, including transparent RGB, but deduplicate
+            # only inside this symbol. Cross-symbol duplicates deliberately get
+            # separate cells so a multi-page layout can keep symbols isolated.
+            key = symbol,detail['rgbaSHA256']
+            cell = by_pixels.get(key)
+            if cell is None:
+                cell = Cell(name_in_manifest, detail['width'], detail['height'],
+                            detail['rgbaSHA256'], index, symbol, int(rows[index][1]))
+                cells.append(cell);by_pixels[key] = cell
+            if name_in_manifest not in cell.files:
+                cell.files.append(name_in_manifest)
+            by_row[index] = cell
+    pages,page_partition = pack_cells(cells)
     target.mkdir(parents=True)
     atlas_dir = target/'atlases'
     if pages:
@@ -230,14 +256,16 @@ def convert_folder(source, output, name, backgrounds):
         atlas.save(path, format='PNG', compress_level=6)
         atlas.close()
         page_reports.append(dict(file=filename, width=page.width, height=page.height, pageLimit=page.edge,
-                                 cells=len(page.cells), bytes=path.stat().st_size, sha256=sha256_file(path)))
+                                 symbol=page.symbol or None, symbols=sorted({cell.symbol for cell in page.cells}),
+                                 cells=len(page.cells),
+                                 bytes=path.stat().st_size, sha256=sha256_file(path)))
 
     converted = []
     row_proofs = []
     for index, row in enumerate(rows):
         values = row.copy()
         if index in animated_rows:
-            cell = by_file[row[2]];page = pages[cell.page]
+            cell = by_row[index];page = pages[cell.page]
             values[2] = page_reports[cell.page]['file']
             uv = ((cell.x+PADDING)/page.width, (cell.y+PADDING)/page.height,
                   cell.width/page.width, cell.height/page.height)
@@ -250,7 +278,8 @@ def convert_folder(source, output, name, backgrounds):
     # Every output texture row is linked to its source pixel hash and dimensions.
     indices_by_page = defaultdict(list)
     for index in sorted(animated_rows):
-        indices_by_page[by_file[rows[index][2]].page].append(index)
+        indices_by_page[by_row[index].page].append(index)
+    source_page_crops_verified = 0
     for page_index, indices in sorted(indices_by_page.items()):
         atlas = rgba(target/page_reports[page_index]['file'])
         verified_files = {}
@@ -264,11 +293,13 @@ def convert_folder(source, output, name, backgrounds):
             if (w, h) != (width, height):
                 raise ValueError(f'Normalized atlas extent changed source dimensions: {name}/{source_row[2]}')
             rectangle = [x, y, w, h]
-            if source_row[2] in verified_files:
+            verification_key = int(source_row[0]),source_row[2]
+            if verification_key in verified_files:
                 # A castle frame can have several logical aliases referencing
-                # exactly this source PNG and rectangle. Verify the reference,
-                # without decoding/reconstructing the same pixels again.
-                if verified_files[source_row[2]] != rectangle:
+                # the same partition's source PNG and rectangle. A compact page
+                # may hold separate copies for two symbols sharing one file;
+                # those copies must each be compared, including their extrusion.
+                if verified_files[verification_key] != rectangle:
                     raise ValueError(f'Reused source has inconsistent atlas coordinates: {name}/{source_row[2]}')
                 digest = detail['rgbaSHA256']
             else:
@@ -286,7 +317,8 @@ def convert_folder(source, output, name, backgrounds):
                 expected = np.pad(np.asarray(source_image), ((PADDING, PADDING), (PADDING, PADDING), (0, 0)), mode='edge')
                 if padded.tobytes() != expected.tobytes():
                     raise ValueError(f'Atlas extrusion differs from source edges: {name}/{source_row[2]}')
-                verified_files[source_row[2]] = rectangle
+                verified_files[verification_key] = rectangle
+                source_page_crops_verified += 1
                 source_image.close();crop.close();padded.close()
             row_proofs.append(dict(symbol=int(source_row[0]), frame=int(source_row[1]), sourceFile=source_row[2],
                                    atlasFile=row[2], rectangle=[x, y, w, h], rgbaSHA256=digest))
@@ -324,15 +356,24 @@ def convert_folder(source, output, name, backgrounds):
                 animatedSymbols=sorted(animated), animatedRows=len(animated_rows), staticRows=len(rows)-len(animated_rows),
                 staticBackgroundVariantsExcluded=sorted(excluded),
                 staticBackgroundRowsExcluded=sum(len(by_symbol[symbol]) for symbol in excluded),
-                originalAnimatedPngFiles=len(files), uniqueRgbaCells=len(cells), identicalRgbaFilesDeduplicated=len(files)-len(cells),
+                originalAnimatedPngFiles=len(files), animatedSymbolFileReferences=len(symbol_files),
+                uniqueRgbaCells=len(cells), identicalRgbaFilesDeduplicated=len(symbol_files)-len(cells),
+                globalUniqueRgbaCells=len({detail['rgbaSHA256'] for detail in source_details.values()}),
+                crossSymbolDuplicateCellsRetained=len(cells)-len({detail['rgbaSHA256'] for detail in source_details.values()}),
                 atlasFiles=len(pages), atlases=page_reports, inputFiles=len(input_paths), outputFiles=len(output_paths),
-                packingPolicy='adaptive-2048-or-4096', packingOrder='timeline' if name=='giants' else 'size', largeCellThresholdIncludingPadding=LARGE_CELL_THRESHOLD,
+                packingPolicy='compact-single-page-else-symbol-partitioned-adaptive-2048-or-4096',
+                pagePartition=page_partition, compactSinglePageBudgetBytes=COMPACT_SINGLE_PAGE_BUDGET,
+                packingOrder='size' if page_partition=='compact-single-page' else 'symbol-then-timeline',
+                deduplicationScope='within-symbol-only',
+                crossSymbolDeduplicationTradeoff='Identical RGBA in different symbols is retained separately for symbol locality; only a bounded compact group shares one page. Disk size and page count may increase.',
+                largeCellThresholdIncludingPadding=LARGE_CELL_THRESHOLD,
                 promotedLargeCells=sum(cell.width+PADDING*2 > LARGE_CELL_THRESHOLD
                                        and cell.height+PADDING*2 > LARGE_CELL_THRESHOLD for cell in cells),
                 inputBytes=input_bytes, outputBytes=output_bytes, bytesSaved=input_bytes-output_bytes,
                 replacedSourcePngFiles=sorted(omit), preservedFiles=preserved,
                 animatedCropRgbaVerified=len(row_proofs), extrusionVerified=True,
-                uniqueSourceCropsVerified=len(files), reusedVerifiedRowReferences=len(row_proofs)-len(files),
+                uniqueSourceCropsVerified=len(files), sourcePageCropsVerified=source_page_crops_verified,
+                reusedVerifiedRowReferences=len(row_proofs)-source_page_crops_verified,
                 originalLogicalColumnsPreserved=True, rows=row_proofs,
                 resampling=False, paletteConversion=False, lossyCompression=False)
 
@@ -358,7 +399,12 @@ def build(source, output, folders=None):
                   padding=PADDING, defaultPageLimit=STANDARD_EDGE, largePageLimit=LARGE_EDGE,
                   normalizedCoordinates=True, excludedFolders=sorted(EXCLUDED_FOLDERS),
                   backgroundSymbolsFromSourceRules=sorted(backgrounds), folders=[])
-    report['packingPolicy'] = '4096 if a padded cell exceeds 2048 on either axis or exceeds 1024 on both axes; otherwise 2048'
+    report['packingPolicy'] = 'compact-single-page-under-budget-else-symbol-partitioned-timeline'
+    report['pageSizePolicy'] = '4096 if a padded cell exceeds 2048 on either axis or exceeds 1024 on both axes; otherwise 2048'
+    report['packingOrder'] = 'size for compact groups; otherwise symbol-then-timeline'
+    report['pagePartitionPolicy'] = 'keep a global size-sorted layout only if exactly one page and decoded RGBA <= compactSinglePageBudgetBytes; otherwise isolate symbols'
+    report['compactSinglePageBudgetBytes'] = COMPACT_SINGLE_PAGE_BUDGET
+    report['deduplicationScope'] = 'within-symbol-only'
     report['legacyStaticBackgroundSymbolsWithoutLayerRules'] = sorted(LEGACY_BACKGROUND_SYMBOLS)
     started = time.perf_counter()
     for name in names:
@@ -368,6 +414,12 @@ def build(source, output, folders=None):
               f"{result['animatedCropRgbaVerified']} RGBA crops verified; "
               f"{result['inputFiles']} -> {result['outputFiles']} files", flush=True)
     report['seconds'] = time.perf_counter()-started
+    report['pagePartitionByFolder'] = {f['folder']:f['pagePartition'] for f in report['folders']}
+    report['allFolderPartitionPoliciesApplied'] = all(
+        (f['pagePartition']=='compact-single-page' and f['atlasFiles']==1
+         and f['atlases'][0]['width']*f['atlases'][0]['height']*4 <= COMPACT_SINGLE_PAGE_BUDGET)
+        or (f['pagePartition']=='one-symbol-per-page'
+            and all(len(page['symbols'])==1 for page in f['atlases'])) for f in report['folders'])
     report['allAnimatedRowsVerified'] = all(f['animatedRows'] == f['animatedCropRgbaVerified'] for f in report['folders'])
     output.parent.mkdir(parents=True, exist_ok=True)
     report_path = output.parent/(output.name+'-sprite-sheets-report.json')

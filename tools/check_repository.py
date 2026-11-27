@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_ASSETS = {"assets/branding/max-games.png"}
+ALLOWED_ASSETS = {"assets/branding/max-games.png", "assets/branding/stick-engine-2.png"}
 
 
 def resolve_local_link(root, document, target):

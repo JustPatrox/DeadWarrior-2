@@ -78,7 +78,8 @@ def validate(args):
     for module in ("PIL", "numpy", "jpype", "imageio_ffmpeg"):
         if importlib.util.find_spec(module) is None:
             raise ValueError("Missing Python dependency; run pip install -r requirements-assets.txt")
-    for file in ("art/menu/left.png", "art/menu/right.png", "assets/branding/max-games.png"):
+    for file in ("art/menu/left.png", "art/menu/right.png", "assets/branding/max-games.png",
+                 "assets/branding/stick-engine-2.png"):
         if not (ROOT / file).is_file():
             raise ValueError("Missing repository resource: " + file)
     if not (ROOT / "work/tools/flashplayer-sa.exe").is_file():
