@@ -275,10 +275,15 @@ public:
         if(!snapshot.empty()) renderer_.png(snapshot);
         SDL_SetRenderTarget(native,nullptr);SDL_SetRenderDrawColor(native,0,0,0,255);SDL_RenderClear(native);SDL_RenderTexture(native,buffer_,nullptr,nullptr);SDL_RenderPresent(native);
     }
-    int run() {
+    void show() {
         noticeEnd_=Clock::now()+std::chrono::seconds(3);
+        // Present the initial black frame before Cocoa makes the Metal window
+        // visible. Smoke checks must exercise the same startup path as play.
         int firstW,firstH;SDL_GetRenderOutputSize(renderer_.native(),&firstW,&firstH);
         draw(firstW,firstH);SDL_ShowWindow(window_);
+    }
+    int run() {
+        show();
         auto deadline=Clock::now(),frameDeadline=deadline,countStart=deadline;int count=0;
         while(running_) {
             SDL_Event event;
@@ -498,7 +503,7 @@ int main(int argc,char** argv) {
         SDL_SetWindowMinimumSize(window,640,360);
         if(test) SDL_Log("SMOKE constructing application");
         Application app(window,root,saveDir);
-        if(test) SDL_ShowWindow(window);
+        if(test) app.show();
         if(test) SDL_Log("SMOKE application ready");
         if(test) {app.selfTest(testDir);result=0;}else result=app.run();
     } catch(const std::exception& error) {
