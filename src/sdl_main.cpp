@@ -280,7 +280,11 @@ public:
         // Present the initial black frame before Cocoa makes the Metal window
         // visible. Smoke checks must exercise the same startup path as play.
         int firstW,firstH;SDL_GetRenderOutputSize(renderer_.native(),&firstW,&firstH);
-        draw(firstW,firstH);SDL_ShowWindow(window_);
+        SDL_Log("STARTUP priming hidden window %dx%d",firstW,firstH);
+        draw(firstW,firstH);
+        SDL_Log("STARTUP showing native window");
+        SDL_ShowWindow(window_);
+        SDL_Log("STARTUP native window shown");
     }
     int run() {
         show();

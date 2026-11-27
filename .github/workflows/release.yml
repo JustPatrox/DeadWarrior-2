@@ -109,19 +109,11 @@ jobs:
           # A bare Xvfb server cannot exercise that transition.
           xvfb-run -a python tools/run_linux_smoke.py 'out/package/DeadWarrior 2'
       - name: Test macOS window, renderer, input, audio, pause and saves
+        timeout-minutes: 8
         if: runner.os == 'macOS'
         env:
           SDL_AUDIO_DRIVER: dummy
-        run: |
-          set +e
-          "out/package/DeadWarrior 2.app/Contents/MacOS/DeadWarrior 2" --smoke-test out/checks --save-dir out/test-save
-          result=$?
-          if [ "$result" -ne 0 ]; then
-            mkdir -p out/checks
-            sleep 2
-            find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'DeadWarrior*' -type f -exec cp {} out/checks/ \;
-          fi
-          exit "$result"
+        run: python tools/run_macos_smoke.py 'out/package/DeadWarrior 2.app/Contents/MacOS/DeadWarrior 2'
       - name: Verify portable intro and platform report
         if: runner.os != 'Windows'
         run: |
